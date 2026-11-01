@@ -1,0 +1,265 @@
+name: Release Align
+
+on:
+  push:
+    branches: [main]        # change/add branches here if needed
+    paths: ['push.txt']     # only look at pushes that touch push.txt
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (x.y.z)'
+        required: true
+        default: '0.0.1'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_NAME: "Align"
+  APP_IDENTIFIER: "com.g10drasingh.align"
+  APP_AUTHOR: "g10drasingh"
+  APP_SHORT_DESC: "Executive project management ledger for tracking projects, follow-ups and meetings."
+  APP_LONG_DESC: "Align is a high-density executive ledger built for the Executive Assistant to the CEO. It tracks projects, tasks, follow-ups and meetings, rolls progress up with a priority-weighted algorithm, flags overdue and blocked work, and highlights items that need CEO attention. It runs locally on your device."
+
+jobs:
+  # Decides whether a release should happen at all.
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          VERSION=""
+
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            VERSION="${INPUT_VERSION:-0.0.1}"
+          elif [[ ! -f push.txt ]]; then
+            echo "::notice::push.txt not found - nothing to release."
+          else
+            if [[ "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              ADDED="$(cat push.txt)"
+            else
+              ADDED="$(git diff --unified=0 "$BEFORE" "$GITHUB_SHA" -- push.txt | grep '^+' | grep -v '^+++' | sed 's/^+//' || true)"
+            fi
+            # last non-empty, non-comment line that was added in this push
+            VERSION="$(printf '%s\n' "$ADDED" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v -e '^$' -e '^#' | tail -n 1 || true)"
+          fi
+
+          VERSION="${VERSION#v}"
+
+          if [[ -z "$VERSION" ]]; then
+            echo "::notice::No new version line in push.txt - skipping release."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::warning::The new line in push.txt is not a valid version (expected x.y.z) - skipping."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Releasing version $VERSION"
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_VERSION: ${{ needs.gate.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies
+        run: |
+          if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
+          npm install --no-save --no-audit --no-fund @tauri-apps/cli@^2
+
+      - name: Scaffold Tauri (skipped if src-tauri already exists)
+        run: |
+          if [[ -f src-tauri/tauri.conf.json ]]; then
+            echo "src-tauri already present - leaving it as is"
+            exit 0
+          fi
+
+          PORT="$(grep -hoE '(--port[= ]+|port: *)[0-9]+' package.json vite.config.* 2>/dev/null | grep -oE '[0-9]+$' | head -n 1 || true)"
+          PORT="${PORT:-3000}"
+          OUTDIR="$(grep -hoE "outDir: *['\"][^'\"]+['\"]" vite.config.* 2>/dev/null | head -n 1 | sed -E "s/.*['\"]([^'\"]+)['\"]/\1/" || true)"
+          OUTDIR="${OUTDIR:-dist}"
+
+          npx tauri init --ci \
+            --app-name "$APP_NAME" \
+            --window-title "$APP_NAME" \
+            --frontend-dist "../$OUTDIR" \
+            --dev-url "http://localhost:$PORT" \
+            --before-dev-command "npm run dev" \
+            --before-build-command "npm run build -- --base=./"
+
+          node <<'EOF'
+          const fs = require('fs');
+          const e = process.env;
+
+          const p = 'src-tauri/tauri.conf.json';
+          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+          c.productName = e.APP_NAME;
+          c.identifier = e.APP_IDENTIFIER;
+          c.app = c.app || {};
+          c.app.windows = [{
+            title: e.APP_NAME, width: 1440, height: 900,
+            minWidth: 1024, minHeight: 680, resizable: true
+          }];
+          c.app.security = Object.assign({}, c.app.security, { csp: null });
+          c.bundle = Object.assign({}, c.bundle, {
+            active: true,
+            targets: 'all',
+            category: 'Productivity',
+            publisher: e.APP_AUTHOR,
+            copyright: 'Copyright (c) ' + new Date().getFullYear() + ' ' + e.APP_AUTHOR,
+            shortDescription: e.APP_SHORT_DESC,
+            longDescription: e.APP_LONG_DESC,
+            icon: ['icons/32x32.png', 'icons/128x128.png', 'icons/128x128@2x.png', 'icons/icon.icns', 'icons/icon.ico']
+          });
+          fs.writeFileSync(p, JSON.stringify(c, null, 2));
+
+          const cp = 'src-tauri/Cargo.toml';
+          let t = fs.readFileSync(cp, 'utf8');
+          t = t.replace(/^description = ".*"/m, 'description = "' + e.APP_SHORT_DESC + '"')
+               .replace(/^authors = \[.*\]/m, 'authors = ["' + e.APP_AUTHOR + '"]');
+          fs.writeFileSync(cp, t);
+          EOF
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Generate app icons
+        run: |
+          if [[ -n "$(git ls-files src-tauri/icons | head -n 1)" ]]; then
+            echo "Using icons committed in src-tauri/icons"
+            exit 0
+          fi
+
+          if [[ -f align-icon.png ]] && npx tauri icon align-icon.png; then
+            echo "Icons generated from align-icon.png"
+          elif [[ -f align-icon.svg ]] && npx tauri icon align-icon.svg; then
+            echo "Icons generated from align-icon.svg"
+          else
+            echo "::warning::align-icon.png/svg missing or not square - using a placeholder icon."
+            node <<'EOF'
+          const zlib = require('zlib'), fs = require('fs');
+          const S = 1024;
+          const row = Buffer.alloc(1 + S * 4);
+          for (let x = 0; x < S; x++) {
+            row[1 + x * 4] = 0x41; row[2 + x * 4] = 0x9B; row[3 + x * 4] = 0x2A; row[4 + x * 4] = 255;
+          }
+          const raw = Buffer.concat(Array(S).fill(row));
+          function chunk(t, d) {
+            const len = Buffer.alloc(4); len.writeUInt32BE(d.length);
+            const td = Buffer.concat([Buffer.from(t), d]);
+            const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td) >>> 0);
+            return Buffer.concat([len, td, crc]);
+          }
+          const ihdr = Buffer.alloc(13);
+          ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 6;
+          fs.writeFileSync('.placeholder-icon.png', Buffer.concat([
+            Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+            chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))
+          ]));
+          EOF
+            npx tauri icon .placeholder-icon.png
+          fi
+
+      - name: Apply release version
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const v = process.env.APP_VERSION;
+          const p = 'src-tauri/tauri.conf.json';
+          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+          c.version = v;
+          fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          const cp = 'src-tauri/Cargo.toml';
+          const t = fs.readFileSync(cp, 'utf8').replace(/^version = ".*"/m, 'version = "' + v + '"');
+          fs.writeFileSync(cp, t);
+          EOF
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tauriScript: npx tauri
+          tagName: v${{ needs.gate.outputs.version }}
+          releaseName: 'Align v${{ needs.gate.outputs.version }}'
+          releaseBody: |
+            **Align** - executive project management ledger for tracking projects, follow-ups, meetings and items that need CEO attention.
+
+            ### Install
+            - **Windows:** run the `.exe` or `.msi`. If SmartScreen appears, click "More info", then "Run anyway".
+            - **macOS:** open the `.dmg` (`aarch64` = Apple Silicon, `x64` = Intel) and drag Align to Applications. The app is unsigned, so run `xattr -cr /Applications/Align.app` once, or use System Settings, Privacy & Security, "Open Anyway".
+            - **Linux:** use the `.AppImage` (`chmod +x` first), `.deb` or `.rpm`.
+          releaseDraft: true
+          prerelease: false
+          commitish: ${{ github.sha }}
+          args: ${{ matrix.args }}
+
+  # Un-drafts the release once every platform build has uploaded successfully.
+  publish:
+    needs: [gate, release]
+    if: needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft=false --latest
