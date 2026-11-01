@@ -29,7 +29,10 @@ export const initialUsers: AppUser[] = [
     name: 'Suman Shrestha (EA)',
     email: 'ea@esewa.com.np',
     role: 'ea',
+    departmentId: 'dept-ge',
     isActive: true,
+    createdAt: '2026-10-01',
+    password: 'align@2026',
   },
   {
     id: 'u-admin',
@@ -37,13 +40,8 @@ export const initialUsers: AppUser[] = [
     email: 'admin@esewa.com.np',
     role: 'admin',
     isActive: true,
-  },
-  {
-    id: 'u-ceo',
-    name: 'Jeetendra Singh (CEO)',
-    email: 'ceo@esewa.com.np',
-    role: 'ceo_viewer',
-    isActive: true,
+    createdAt: '2026-10-01',
+    password: 'align@2026',
   },
 ];
 
@@ -563,6 +561,19 @@ export const initialFollowups: Followup[] = [
 ];
 
 export const initialMeetings: Meeting[] = [
+  {
+    id: 'meet-today-nov1',
+    title: 'G&E Merchant Escalation & SLA Briefing',
+    meetingTypeId: 'mt-weekly',
+    scheduledAt: '2026-11-01T14:30:00Z',
+    status: 'scheduled',
+    agenda: '1. Resolve blocked API gateway credentials with Core Eng\n2. Address vendor SMS delivery audit',
+    attendeeIds: ['tm-sr', 'tm-bt', 'tm-ra'],
+    isArchived: false,
+    createdBy: 'u-ea',
+    createdAt: '2026-10-31T15:00:00Z',
+    updatedAt: '2026-10-31T15:00:00Z',
+  },
   {
     id: 'meet-weekly-nov2',
     title: 'G&E Weekly Leadership Sync',

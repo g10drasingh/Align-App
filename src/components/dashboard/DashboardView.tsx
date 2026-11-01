@@ -14,6 +14,8 @@ import {
   Lock,
   OctagonX,
   Plus,
+  CalendarDays,
+  Link2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { SummaryStrip } from '../common/SummaryStrip';
@@ -22,6 +24,7 @@ import {
   countLeaves,
   getDeadlineInfo,
 } from '../../utils/engine';
+import { Meeting } from '../../types';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -40,9 +43,14 @@ export const DashboardView: React.FC = () => {
     canEdit,
     setIsNewItemOpen,
     setNewItemDefaultType,
+    meetings,
+    meetingTypes,
+    itemLinks,
+    updateMeeting,
   } = useApp();
 
   const [followupTab, setFollowupTab] = useState<'today' | 'upcoming' | 'missed'>('today');
+  const [meetingTab, setMeetingTab] = useState<'today' | 'upcoming' | 'all'>('today');
 
   const windowDays =
     dueSoonUnit === 'weeks' ? dueSoonWindow * 7 : dueSoonUnit === 'months' ? dueSoonWindow * 30 : dueSoonWindow;
@@ -87,6 +95,15 @@ export const DashboardView: React.FC = () => {
   const upcomingFollowups = followups.filter((f) => f.followupDate > todayStr && f.statusId === 'fstat-scheduled');
   const missedFollowups = followups.filter((f) => f.statusId === 'fstat-missed');
 
+  // Meetings (Today & Upcoming)
+  const todayMeetings = meetings
+    .filter((m) => !m.isArchived && m.scheduledAt.startsWith(todayStr))
+    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+
+  const upcomingMeetings = meetings
+    .filter((m) => !m.isArchived && m.scheduledAt.slice(0, 10) > todayStr)
+    .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+
   // Department workloads (only open items)
   const deptCounts = departments.map((d) => {
     const count = activeItems.filter((item) => {
@@ -99,6 +116,77 @@ export const DashboardView: React.FC = () => {
 
   const maxDeptCount = Math.max(1, ...deptCounts.map((d) => d.count));
 
+  const renderMeetingCard = (m: Meeting, isTodaySection = false) => {
+    const mt = meetingTypes.find((t) => t.id === m.meetingTypeId);
+    const dateObj = new Date(m.scheduledAt);
+    const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = dateObj.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    const generatedLinks = itemLinks.filter(
+      (l) => l.sourceType === 'meeting' && l.sourceId === m.id && l.targetType === 'work_item'
+    );
+
+    return (
+      <div
+        key={m.id}
+        onClick={() => setActiveNav('meetings')}
+        className="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2 hover:bg-[var(--surface-2)] -mx-4 px-4 transition-colors cursor-pointer group"
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-2 w-2 rounded-full shrink-0"
+              style={{ backgroundColor: mt?.color || 'var(--brand-600)' }}
+            />
+            <span className="text-xs font-semibold text-[var(--text)] truncate">
+              {m.title}
+            </span>
+            <span className="rounded bg-[var(--surface-3)] px-1.5 py-0.2 text-[10px] text-[var(--text-2)] font-medium shrink-0">
+              {mt?.name}
+            </span>
+            {m.status === 'held' && (
+              <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 text-[10px] font-semibold uppercase shrink-0">
+                Held
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 mt-1 text-[11px] text-[var(--text-3)] truncate">
+            <span className="flex items-center gap-1 font-medium text-[var(--text-2)] shrink-0">
+              <Clock className="h-3 w-3 text-[var(--brand-600)] shrink-0" />
+              <span>{isTodaySection ? `Today at ${timeStr}` : `${dateStr} · ${timeStr}`}</span>
+            </span>
+            {m.agenda && (
+              <span className="text-[var(--text-2)] truncate max-w-sm">
+                Agenda: {m.agenda.split('\n')[0]}
+              </span>
+            )}
+            {generatedLinks.length > 0 && (
+              <span className="text-[var(--brand-600)] font-semibold flex items-center gap-1 shrink-0">
+                <Link2 className="h-3 w-3" />
+                <span>{generatedLinks.length} action item{generatedLinks.length === 1 ? '' : 's'}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {canEdit && m.status === 'scheduled' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                updateMeeting(m.id, { status: 'held' });
+              }}
+              className="rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+            >
+              Mark Held
+            </button>
+          )}
+          <ChevronRight className="h-3.5 w-3.5 text-[var(--text-3)] group-hover:text-[var(--text)] transition-colors" />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Page Title & Date Header */}
@@ -106,7 +194,7 @@ export const DashboardView: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text)]">Dashboard</h1>
           <p className="text-xs text-[var(--text-3)] mt-0.5">
-            Executive Ledger as of Sunday, 1 November 2026 (Asia/Kathmandu)
+            Summary as of Sunday, 1 November 2026 (Asia/Kathmandu)
           </p>
         </div>
         {canEdit && (
@@ -374,8 +462,122 @@ export const DashboardView: React.FC = () => {
           </div>
         </section>
 
-        {/* Mid-Left: Overdue Items (8 cols) */}
+        {/* Mid-Left: Meetings Section (8 cols) with Today & Upcoming */}
         <section className="lg:col-span-8 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xs">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+            <div className="flex items-center gap-2">
+              <div className="flex h-5 w-5 items-center justify-center rounded bg-[var(--brand-subtle)] text-[var(--brand-600)]">
+                <CalendarDays className="h-3.5 w-3.5" />
+              </div>
+              <h2 className="text-sm font-semibold text-[var(--text)]">Meetings</h2>
+              <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[var(--brand-subtle)] border border-[var(--brand-border)] px-1.5 text-[11px] font-semibold text-[var(--brand-600)]">
+                {todayMeetings.length + upcomingMeetings.length}
+              </span>
+            </div>
+            <button
+              onClick={() => setActiveNav('meetings')}
+              className="text-xs font-medium text-[var(--brand-600)] hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <span>View all</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Inner Tabs: Today | Upcoming | All */}
+          <div className="flex border-b border-[var(--border)] mt-2 text-xs">
+            <button
+              onClick={() => setMeetingTab('today')}
+              className={`flex-1 pb-2 text-center font-medium cursor-pointer transition-colors ${
+                meetingTab === 'today'
+                  ? 'border-b-2 border-[var(--brand-600)] text-[var(--brand-600)] font-semibold'
+                  : 'text-[var(--text-3)] hover:text-[var(--text)]'
+              }`}
+            >
+              Today ({todayMeetings.length})
+            </button>
+            <button
+              onClick={() => setMeetingTab('upcoming')}
+              className={`flex-1 pb-2 text-center font-medium cursor-pointer transition-colors ${
+                meetingTab === 'upcoming'
+                  ? 'border-b-2 border-[var(--brand-600)] text-[var(--brand-600)] font-semibold'
+                  : 'text-[var(--text-3)] hover:text-[var(--text)]'
+              }`}
+            >
+              Upcoming ({upcomingMeetings.length})
+            </button>
+            <button
+              onClick={() => setMeetingTab('all')}
+              className={`flex-1 pb-2 text-center font-medium cursor-pointer transition-colors ${
+                meetingTab === 'all'
+                  ? 'border-b-2 border-[var(--brand-600)] text-[var(--brand-600)] font-semibold'
+                  : 'text-[var(--text-3)] hover:text-[var(--text)]'
+              }`}
+            >
+              All ({todayMeetings.length + upcomingMeetings.length})
+            </button>
+          </div>
+
+          <div className="divide-y divide-[var(--border)] mt-1">
+            {meetingTab === 'today' &&
+              (todayMeetings.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[var(--text-3)]">
+                  No meetings scheduled for today.
+                </div>
+              ) : (
+                todayMeetings.map((m) => renderMeetingCard(m, true))
+              ))}
+
+            {meetingTab === 'upcoming' &&
+              (upcomingMeetings.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[var(--text-3)]">
+                  No upcoming meetings scheduled.
+                </div>
+              ) : (
+                upcomingMeetings.map((m) => renderMeetingCard(m, false))
+              ))}
+
+            {meetingTab === 'all' && (
+              <div className="space-y-4 pt-2">
+                {/* Today subsection */}
+                <div>
+                  <div className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span>Today's Meetings</span>
+                    <span className="text-[10px] rounded bg-[var(--surface-3)] px-1.5 py-0.2 tabular-nums">
+                      {todayMeetings.length}
+                    </span>
+                  </div>
+                  {todayMeetings.length === 0 ? (
+                    <div className="py-2 text-xs text-[var(--text-3)] italic">No meetings today</div>
+                  ) : (
+                    <div className="divide-y divide-[var(--border)]">
+                      {todayMeetings.map((m) => renderMeetingCard(m, true))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Upcoming subsection */}
+                <div className="pt-2 border-t border-[var(--border)]">
+                  <div className="text-[11px] font-bold text-[var(--text-3)] uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <span>Upcoming Meetings</span>
+                    <span className="text-[10px] rounded bg-[var(--surface-3)] px-1.5 py-0.2 tabular-nums">
+                      {upcomingMeetings.length}
+                    </span>
+                  </div>
+                  {upcomingMeetings.length === 0 ? (
+                    <div className="py-2 text-xs text-[var(--text-3)] italic">No upcoming meetings</div>
+                  ) : (
+                    <div className="divide-y divide-[var(--border)]">
+                      {upcomingMeetings.map((m) => renderMeetingCard(m, false))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Mid-Right: Blocked Items (4 cols) */}
+        <section className="lg:col-span-4 rounded-md border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xs">
           <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-[var(--danger-fg)]" />

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CalendarDays,
   Check,
@@ -17,6 +17,13 @@ import {
   Sliders,
   Sun,
   Monitor,
+  PanelLeft,
+  Eye,
+  ShieldCheck,
+  UserPlus,
+  Users,
+  Lock,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -25,20 +32,40 @@ export const TopBar: React.FC = () => {
     activeNav,
     setActiveNav,
     isSidebarCollapsed,
+    setIsSidebarCollapsed,
     theme,
     setTheme,
     density,
     setDensity,
     currentUser,
+    users,
+    lockApp,
+    logout,
     setIsCommandPaletteOpen,
     setIsNewItemOpen,
     setNewItemDefaultType,
     canEdit,
+    isAdmin,
+    isEA,
     isCeoViewer,
+    isViewer,
   } = useApp();
 
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Global Alt+L keyboard shortcut to lock the app
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'l' || e.key === 'L')) {
+        e.preventDefault();
+        lockApp();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lockApp]);
 
   // Breadcrumb mapping
   const getBreadcrumbTitle = () => {
@@ -70,15 +97,25 @@ export const TopBar: React.FC = () => {
     >
       {/* Breadcrumb path */}
       <div className="flex items-center gap-2 overflow-hidden text-sm">
+        {isSidebarCollapsed && (
+          <button
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer mr-1 transition-colors shrink-0"
+            title="Expand sidebar"
+          >
+            <PanelLeft className="h-4 w-4" />
+          </button>
+        )}
         <span className="text-[var(--text-3)] font-medium">Align</span>
         <span className="text-[var(--text-3)]">/</span>
         <span className="font-semibold text-[var(--text)] truncate">
           {getBreadcrumbTitle()}
         </span>
 
-        {isCeoViewer && (
-          <span className="ml-2 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-            Executive Read-Only View
+        {isViewer && (
+          <span className="ml-2 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+            <Eye className="h-3 w-3" />
+            {isCeoViewer ? 'CEO Read-Only View' : 'Stakeholder Read-Only'}
           </span>
         )}
       </div>
@@ -242,18 +279,102 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
-        {/* User avatar / badge */}
-        <div className="flex items-center gap-2 pl-1 border-l border-[var(--border)]">
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-3)] text-xs font-semibold text-[var(--text-2)]"
-            title={`${currentUser.name} (${currentUser.role.toUpperCase()})`}
+        {/* Quick Lock Button */}
+        <button
+          onClick={lockApp}
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer"
+          title="Lock App (Alt+L)"
+        >
+          <Lock className="h-4 w-4" />
+        </button>
+
+        {/* User avatar / account switcher */}
+        <div className="relative pl-1 border-l border-[var(--border)]">
+          <button
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            className="flex items-center gap-1.5 rounded-full p-0.5 hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+            title={`${currentUser.name} (${currentUser.role.toUpperCase()}) - Click to switch or manage accounts`}
           >
-            {currentUser.name
-              .split(' ')
-              .map((n) => n[0])
-              .join('')
-              .slice(0, 2)}
-          </div>
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-600)] text-xs font-semibold text-white shadow-2xs">
+              {currentUser.name
+                .split(' ')
+                .map((n) => n[0])
+                .join('')
+                .slice(0, 2)}
+            </div>
+            <ChevronDown className="h-3 w-3 text-[var(--text-3)]" />
+          </button>
+
+          {isUserMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-64 rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 shadow-lg space-y-2">
+                {/* Current profile info */}
+                <div className="border-b border-[var(--border)] pb-2 px-1">
+                  <div className="font-semibold text-xs text-[var(--text)]">{currentUser.name}</div>
+                  <div className="text-[11px] text-[var(--text-3)] font-mono truncate">{currentUser.email}</div>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    {currentUser.role === 'admin' ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300">
+                        <ShieldCheck className="h-3 w-3" /> Admin (Full Access + Users)
+                      </span>
+                    ) : currentUser.role === 'ea' ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                        <Check className="h-3 w-3" /> EA (Executive Assistant)
+                      </span>
+                    ) : currentUser.role === 'ceo_viewer' ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                        <Eye className="h-3 w-3" /> CEO (Read-Only)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:text-slate-300">
+                        <Eye className="h-3 w-3" /> Stakeholder Viewer
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Management shortcuts & Session controls */}
+                <div className="border-t border-[var(--border)] pt-1 space-y-1">
+                  <button
+                    onClick={() => {
+                      setActiveNav('settings');
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer"
+                  >
+                    <Users className="h-3.5 w-3.5 text-[var(--brand-600)]" />
+                    <span>Manage Users & Roles</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      lockApp();
+                    }}
+                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Lock Screen</span>
+                    </div>
+                    <kbd className="text-[10px] font-mono text-[var(--text-3)]">Alt+L</kbd>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      logout();
+                    }}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer font-medium"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>

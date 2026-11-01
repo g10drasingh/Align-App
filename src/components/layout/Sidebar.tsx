@@ -18,6 +18,8 @@ import {
   UserCheck,
   Eye,
   Flag,
+  Lock,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -30,10 +32,17 @@ export const Sidebar: React.FC = () => {
     summaryCounts,
     followups,
     currentUser,
-    setCurrentUser,
+    lockApp,
+    logout,
     users,
     canEdit,
+    departments,
   } = useApp();
+
+  const userDept = currentUser?.departmentId
+    ? departments.find((d) => d.id === currentUser.departmentId)?.name
+    : undefined;
+  const departmentSubtitle = userDept ? `${userDept} Department` : 'Task Management';
 
   const missedFollowupsCount = followups.filter(
     (f) => f.statusId === 'fstat-missed'
@@ -96,24 +105,48 @@ export const Sidebar: React.FC = () => {
         isSidebarCollapsed ? 'w-16' : 'w-62'
       }`}
     >
-      {/* Brand Header with eSewa Green Logo */}
+      {/* Brand Header with eSewa Green Logo and Collapse Toggle */}
       <div className="flex h-14 items-center justify-between border-b border-[var(--border)] px-3">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          {/* eSewa Green Brand Icon */}
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--brand-600)] text-white shadow-xs font-semibold">
-            <span className="text-base tracking-tighter">eA</span>
-          </div>
-          {!isSidebarCollapsed && (
-            <div className="flex flex-col truncate leading-tight">
-              <span className="font-semibold text-sm text-[var(--text)] tracking-tight">
-                Align
-              </span>
-              <span className="text-[11px] text-[var(--text-3)] truncate">
-                G&E Executive Ledger
-              </span>
+        {isSidebarCollapsed ? (
+          <div className="flex w-full items-center justify-between">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--brand-600)] text-white shadow-xs font-semibold">
+              <span className="text-base tracking-tighter">eA</span>
             </div>
-          )}
-        </div>
+            <button
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer transition-colors"
+              title="Expand sidebar"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              {/* eSewa Green Brand Icon */}
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--brand-600)] text-white shadow-xs font-semibold">
+                <span className="text-base tracking-tighter">eA</span>
+              </div>
+              <div className="flex flex-col truncate leading-tight">
+                <span className="font-semibold text-sm text-[var(--text)] tracking-tight">
+                  Align
+                </span>
+                <span className="text-[11px] text-[var(--text-3)] truncate" title={departmentSubtitle}>
+                  {departmentSubtitle}
+                </span>
+              </div>
+            </div>
+
+            {/* Collapse toggle at top of nav bar */}
+            <button
+              onClick={() => setIsSidebarCollapsed(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer transition-colors shrink-0"
+              title="Collapse sidebar"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Navigation Groups */}
@@ -191,44 +224,56 @@ export const Sidebar: React.FC = () => {
           {!isSidebarCollapsed && <span>Settings & Lists</span>}
         </button>
 
-        {/* User Role Switcher */}
+        {/* Active Account Profile */}
         <div className="pt-1">
-          <div className="rounded-md bg-[var(--surface-2)] p-1.5">
-            <div className="flex items-center justify-between text-[11px] font-medium text-[var(--text-3)] mb-1 px-1">
-              {!isSidebarCollapsed && <span>Active Role</span>}
+          <div className="rounded-md bg-[var(--surface-2)] p-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-600)] text-[10px] font-semibold text-white shrink-0">
+                {currentUser.name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')
+                  .slice(0, 2)}
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="min-w-0 flex-1 leading-tight">
+                  <div className="truncate text-xs font-semibold text-[var(--text)]">
+                    {currentUser.name}
+                  </div>
+                  <div className="truncate text-[10px] uppercase font-mono text-[var(--brand-600)] font-medium">
+                    {currentUser.role === 'admin'
+                      ? 'Administrator'
+                      : currentUser.role === 'ea'
+                      ? 'Executive Assistant'
+                      : currentUser.role === 'ceo_viewer'
+                      ? 'CEO Viewer'
+                      : 'Viewer'}
+                  </div>
+                </div>
+              )}
             </div>
-            <select
-              value={currentUser.id}
-              onChange={(e) => {
-                const u = users.find((x) => x.id === e.target.value);
-                if (u) setCurrentUser(u);
-              }}
-              className="w-full bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] rounded px-1.5 py-1 text-xs font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--brand-600)]"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-          className="flex w-full items-center justify-center rounded-md p-1.5 text-[var(--text-3)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer transition-colors"
-          title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isSidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <div className="flex items-center gap-2 text-xs w-full px-1">
-              <ChevronLeft className="h-4 w-4" />
-              <span>Collapse sidebar</span>
-            </div>
-          )}
-        </button>
+        {/* Quick Lock & Sign Out actions */}
+        <div className="flex items-center gap-1 pt-1 border-t border-[var(--border)]/60">
+          <button
+            onClick={lockApp}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded text-xs text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+            title="Lock App (Alt+L)"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {!isSidebarCollapsed && <span>Lock</span>}
+          </button>
+          <button
+            onClick={logout}
+            className="flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded text-xs text-[var(--text-3)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            {!isSidebarCollapsed && <span>Sign Out</span>}
+          </button>
+        </div>
       </div>
     </aside>
   );

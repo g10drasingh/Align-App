@@ -74,7 +74,31 @@ interface AppContextType {
   users: AppUser[];
   canEdit: boolean; // EA or Admin
   isAdmin: boolean;
+  isEA: boolean;
   isCeoViewer: boolean;
+  isViewer: boolean;
+  addUser: (user: Omit<AppUser, 'id' | 'createdAt'>) => { success: boolean; error?: string };
+  updateUser: (id: string, updates: Partial<AppUser>) => void;
+  toggleUserStatus: (id: string) => void;
+  deleteUser: (id: string) => { success: boolean; error?: string };
+  switchUser: (id: string) => void;
+
+  // Auth & Security state
+  isAuthenticated: boolean;
+  login: (email: string, password: string) => { success: boolean; error?: string };
+  logout: () => void;
+  isAppLocked: boolean;
+  lockApp: () => void;
+  unlockApp: (pin: string) => boolean;
+  hasPinConfigured: boolean;
+  setupPin: (pin: string) => boolean;
+  changePin: (oldPin: string, newPin: string) => { success: boolean; error?: string };
+  resetPin: () => void;
+  autoLockMinutes: number;
+  setAutoLockMinutes: (m: number) => void;
+  lockOnTabBlur: boolean;
+  setLockOnTabBlur: (b: boolean) => void;
+  changeUserPassword: (userId: string, oldPass: string, newPass: string) => { success: boolean; error?: string };
 
   // View state
   activeNav: string; // 'dashboard' | 'tasks' | 'projects' | 'ceo' | 'followups' | 'meetings' | 'settings'
@@ -214,9 +238,60 @@ function saveStorage<T>(key: string, value: T) {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users] = useState<AppUser[]>(initialUsers);
-  const [currentUser, setCurrentUser] = useState<AppUser>(() =>
-    loadStorage('user', initialUsers[0])
+  const [users, setUsers] = useState<AppUser[]>(() => {
+    const saved = loadStorage<AppUser[]>('users', initialUsers);
+    if (Array.isArray(saved) && saved.length > 0) {
+      // If user list still has old default with u-ceo, normalize to the 2 initial users
+      const hasOldCeo = saved.some((u) => u.id === 'u-ceo');
+      if (hasOldCeo && saved.length === 3) {
+        return initialUsers;
+      }
+      return saved.map((u) => {
+        const updated = { ...u };
+        if (updated.id === 'u-ea' && !updated.departmentId) {
+          updated.departmentId = 'dept-ge';
+        }
+        if (!updated.password) {
+          updated.password = 'align@2026';
+        }
+        return updated;
+      });
+    }
+    return initialUsers;
+  });
+
+  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
+    const saved = loadStorage<AppUser | null>('user', null);
+    if (saved && users.some((u) => u.id === saved.id && u.isActive)) {
+      if (saved.id === 'u-ea' && !saved.departmentId) {
+        return { ...saved, departmentId: 'dept-ge' };
+      }
+      const matched = users.find((u) => u.id === saved.id);
+      return matched || saved;
+    }
+    return users[0] || initialUsers[0];
+  });
+
+  // Authentication & Security state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() =>
+    loadStorage<boolean>('is_authenticated', true)
+  );
+
+  const [isAppLocked, setIsAppLocked] = useState<boolean>(() =>
+    loadStorage<boolean>('is_locked', false)
+  );
+
+  const [hasPinConfigured, setHasPinConfigured] = useState<boolean>(() => {
+    const pin = loadStorage<string | null>('pin', null);
+    return Boolean(pin && /^\d{6}$/.test(pin));
+  });
+
+  const [autoLockMinutes, setAutoLockMinutesState] = useState<number>(() =>
+    loadStorage<number>('auto_lock_minutes', 15)
+  );
+
+  const [lockOnTabBlur, setLockOnTabBlurState] = useState<boolean>(() =>
+    loadStorage<boolean>('lock_on_tab_blur', false)
   );
 
   const [activeNav, setActiveNav] = useState<string>('dashboard');
@@ -295,6 +370,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sync to localStorage
   useEffect(() => saveStorage('user', currentUser), [currentUser]);
+  useEffect(() => saveStorage('users', users), [users]);
   useEffect(() => saveStorage('density', density), [density]);
   useEffect(() => saveStorage('theme', theme), [theme]);
   useEffect(() => saveStorage('sidebar_collapsed', isSidebarCollapsed), [isSidebarCollapsed]);
@@ -346,7 +422,217 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const canEdit = currentUser.role === 'ea' || currentUser.role === 'admin';
   const isAdmin = currentUser.role === 'admin';
+  const isEA = currentUser.role === 'ea';
   const isCeoViewer = currentUser.role === 'ceo_viewer';
+  const isViewer = currentUser.role === 'ceo_viewer' || currentUser.role === 'viewer';
+
+  const addUser = (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
+    if (!userData.name.trim() || !userData.email.trim()) {
+      return { success: false, error: 'Name and email are required.' };
+    }
+    const emailNormalized = userData.email.toLowerCase().trim();
+    if (users.some((u) => u.email.toLowerCase() === emailNormalized)) {
+      return { success: false, error: 'A user with this email address already exists.' };
+    }
+    const newUser: AppUser = {
+      ...userData,
+      id: 'u-' + Math.random().toString(36).substring(2, 9),
+      name: userData.name.trim(),
+      email: emailNormalized,
+      isActive: userData.isActive !== false,
+      createdAt: todayStr,
+      password: userData.password?.trim() || 'align@2026',
+    };
+    setUsers((prev) => [...prev, newUser]);
+    logActivity('user', newUser.id, 'create', 'user', null, newUser.name);
+    addToast({
+      message: `User "${newUser.name}" created with role ${newUser.role.toUpperCase()}.`,
+      type: 'success',
+    });
+    return { success: true };
+  };
+
+  const updateUser = (id: string, updates: Partial<AppUser>) => {
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === id) {
+          const updated = { ...u, ...updates };
+          if (currentUser.id === id) {
+            setCurrentUser(updated);
+          }
+          return updated;
+        }
+        return u;
+      })
+    );
+    logActivity('user', id, 'update', 'user', null, JSON.stringify(updates));
+    addToast({ message: 'User profile updated.', type: 'success' });
+  };
+
+  const toggleUserStatus = (id: string) => {
+    if (currentUser.id === id) {
+      addToast({ message: 'Cannot deactivate the currently logged-in account.', type: 'warning' });
+      return;
+    }
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, isActive: !u.isActive } : u))
+    );
+    addToast({ message: 'User status toggled.', type: 'info' });
+  };
+
+  const deleteUser = (id: string) => {
+    if (!isAdmin) {
+      const err = 'Only administrators can delete user accounts.';
+      addToast({ message: err, type: 'danger' });
+      return { success: false, error: err };
+    }
+    if (currentUser.id === id) {
+      const err = 'Cannot delete your own currently logged-in account.';
+      addToast({ message: err, type: 'warning' });
+      return { success: false, error: err };
+    }
+    const userToDelete = users.find((u) => u.id === id);
+    if (!userToDelete) return { success: false, error: 'User not found.' };
+
+    const remainingAdmins = users.filter((u) => u.role === 'admin' && u.id !== id);
+    if (userToDelete.role === 'admin' && remainingAdmins.length === 0) {
+      const err = 'Cannot delete this account. At least one administrator account must be present.';
+      addToast({ message: err, type: 'danger' });
+      return { success: false, error: err };
+    }
+
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+    logActivity('user', id, 'delete', 'user', userToDelete.name, null);
+    addToast({ message: `User "${userToDelete.name}" deleted successfully.`, type: 'info' });
+    return { success: true };
+  };
+
+  const switchUser = (id: string) => {
+    const target = users.find((u) => u.id === id);
+    if (!target) return;
+    if (!target.isActive) {
+      addToast({ message: 'This user account is currently deactivated.', type: 'warning' });
+      return;
+    }
+    setCurrentUser(target);
+    addToast({
+      message: `Active session: ${target.name} (${target.role.toUpperCase()})`,
+      type: 'info',
+    });
+  };
+
+  const setAutoLockMinutes = (m: number) => {
+    setAutoLockMinutesState(m);
+    saveStorage('auto_lock_minutes', m);
+  };
+
+  const setLockOnTabBlur = (b: boolean) => {
+    setLockOnTabBlurState(b);
+    saveStorage('lock_on_tab_blur', b);
+  };
+
+  const login = (email: string, pass: string): { success: boolean; error?: string } => {
+    const emailNorm = email.trim().toLowerCase();
+    const user = users.find((u) => u.email.toLowerCase() === emailNorm);
+    if (!user) {
+      return { success: false, error: 'User with this email not found.' };
+    }
+    if (!user.isActive) {
+      return { success: false, error: 'This user account is inactive. Please contact an administrator.' };
+    }
+    const expectedPass = user.password || 'align@2026';
+    if (pass !== expectedPass) {
+      return { success: false, error: 'Incorrect password. Default password is align@2026' };
+    }
+
+    setCurrentUser(user);
+    saveStorage('user', user);
+    setIsAuthenticated(true);
+    saveStorage('is_authenticated', true);
+    addToast({ message: `Signed in as ${user.name}`, type: 'success' });
+    return { success: true };
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    saveStorage('is_authenticated', false);
+    setIsAppLocked(false);
+    saveStorage('is_locked', false);
+    addToast({ message: 'Signed out successfully.', type: 'info' });
+  };
+
+  const lockApp = () => {
+    setIsAppLocked(true);
+    saveStorage('is_locked', true);
+  };
+
+  const unlockApp = (pin: string): boolean => {
+    const storedPin = loadStorage<string | null>('pin', null);
+    if (!storedPin) {
+      return false;
+    }
+    if (pin === storedPin) {
+      setIsAppLocked(false);
+      saveStorage('is_locked', false);
+      addToast({ message: 'Session unlocked.', type: 'success' });
+      return true;
+    }
+    return false;
+  };
+
+  const setupPin = (pin: string): boolean => {
+    if (!/^\d{6}$/.test(pin)) {
+      addToast({ message: 'PIN must be exactly 6 digits.', type: 'danger' });
+      return false;
+    }
+    saveStorage('pin', pin);
+    setHasPinConfigured(true);
+    setIsAppLocked(false);
+    saveStorage('is_locked', false);
+    addToast({ message: '6-digit PIN set up successfully.', type: 'success' });
+    return true;
+  };
+
+  const changePin = (oldPin: string, newPin: string): { success: boolean; error?: string } => {
+    const storedPin = loadStorage<string | null>('pin', null);
+    if (storedPin && oldPin !== storedPin) {
+      return { success: false, error: 'Current PIN is incorrect.' };
+    }
+    if (!/^\d{6}$/.test(newPin)) {
+      return { success: false, error: 'New PIN must be exactly 6 digits.' };
+    }
+    saveStorage('pin', newPin);
+    setHasPinConfigured(true);
+    addToast({ message: '6-digit PIN changed successfully.', type: 'success' });
+    return { success: true };
+  };
+
+  const resetPin = () => {
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + 'pin');
+    } catch {}
+    setHasPinConfigured(false);
+    addToast({ message: 'PIN reset. You will be prompted on next lock.', type: 'info' });
+  };
+
+  const changeUserPassword = (
+    userId: string,
+    oldPass: string,
+    newPass: string
+  ): { success: boolean; error?: string } => {
+    const targetUser = users.find((u) => u.id === userId);
+    if (!targetUser) return { success: false, error: 'User not found.' };
+    const currentPass = targetUser.password || 'align@2026';
+    if (oldPass !== currentPass) {
+      return { success: false, error: 'Current password is incorrect.' };
+    }
+    if (newPass.length < 6) {
+      return { success: false, error: 'New password must be at least 6 characters.' };
+    }
+    updateUser(userId, { password: newPass });
+    addToast({ message: 'Password updated successfully.', type: 'success' });
+    return { success: true };
+  };
 
   const addToast = (t: Omit<ToastInfo, 'id'>) => {
     const id = 'toast-' + Math.random().toString(36).substring(2, 9);
@@ -912,29 +1198,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteListOption = (listName: string, id: string): { success: boolean; error?: string } => {
-    // Allowed only if never used
-    let isUsed = false;
-    if (listName === 'departments') {
-      isUsed = workItems.some((i) => i.departmentIds.includes(id));
-      if (!isUsed) setDepartments((prev) => prev.filter((d) => d.id !== id));
-    } else if (listName === 'categories') {
-      isUsed = workItems.some((i) => i.categoryId === id);
-      if (!isUsed) setCategories((prev) => prev.filter((c) => c.id !== id));
-    } else if (listName === 'priorities') {
-      isUsed = workItems.some((i) => i.priorityId === id);
-      if (!isUsed) setPriorities((prev) => prev.filter((p) => p.id !== id));
-    } else if (listName === 'statuses') {
-      isUsed = workItems.some((i) => i.statusId === id);
-      if (!isUsed) setStatuses((prev) => prev.filter((s) => s.id !== id));
+    switch (listName) {
+      case 'departments': {
+        setDepartments((prev) => prev.filter((d) => d.id !== id));
+        setWorkItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            departmentIds: item.departmentIds.filter((d) => d !== id),
+          }))
+        );
+        setUsers((prev) =>
+          prev.map((u) => (u.departmentId === id ? { ...u, departmentId: undefined } : u))
+        );
+        setSubDomains((prev) => prev.filter((s) => s.departmentId !== id));
+        break;
+      }
+      case 'subDomains': {
+        setSubDomains((prev) => prev.filter((s) => s.id !== id));
+        setWorkItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            subDomainIds: item.subDomainIds.filter((s) => s !== id),
+          }))
+        );
+        break;
+      }
+      case 'teamMembers': {
+        setTeamMembers((prev) => prev.filter((t) => t.id !== id));
+        setWorkItems((prev) =>
+          prev.map((item) => ({
+            ...item,
+            teamMemberIds: item.teamMemberIds.filter((t) => t !== id),
+          }))
+        );
+        setMeetings((prev) =>
+          prev.map((m) => ({
+            ...m,
+            attendeeIds: m.attendeeIds.filter((t) => t !== id),
+          }))
+        );
+        break;
+      }
+      case 'categories': {
+        const remaining = categories.filter((c) => c.id !== id);
+        const fallbackId = remaining[0]?.id || '';
+        setCategories(remaining);
+        if (fallbackId) {
+          setWorkItems((prev) =>
+            prev.map((item) => (item.categoryId === id ? { ...item, categoryId: fallbackId } : item))
+          );
+        }
+        break;
+      }
+      case 'priorities': {
+        const remaining = priorities.filter((p) => p.id !== id);
+        const fallbackId = remaining[0]?.id || '';
+        setPriorities(remaining);
+        if (fallbackId) {
+          setWorkItems((prev) =>
+            prev.map((item) => (item.priorityId === id ? { ...item, priorityId: fallbackId } : item))
+          );
+        }
+        break;
+      }
+      case 'statuses': {
+        const remaining = statuses.filter((s) => s.id !== id);
+        const fallbackId = remaining[0]?.id || '';
+        setStatuses(remaining);
+        if (fallbackId) {
+          setWorkItems((prev) =>
+            prev.map((item) => (item.statusId === id ? { ...item, statusId: fallbackId } : item))
+          );
+        }
+        break;
+      }
+      case 'ceoAttentionStatuses': {
+        const remaining = ceoAttentionStatuses.filter((c) => c.id !== id);
+        const fallbackId = remaining[0]?.id;
+        setCeoAttentionStatuses(remaining);
+        setWorkItems((prev) =>
+          prev.map((item) =>
+            item.ceoAttentionStatusId === id ? { ...item, ceoAttentionStatusId: fallbackId } : item
+          )
+        );
+        break;
+      }
+      case 'meetingTypes': {
+        const remaining = meetingTypes.filter((m) => m.id !== id);
+        const fallbackId = remaining[0]?.id || '';
+        setMeetingTypes(remaining);
+        if (fallbackId) {
+          setMeetings((prev) =>
+            prev.map((m) => (m.meetingTypeId === id ? { ...m, meetingTypeId: fallbackId } : m))
+          );
+        }
+        break;
+      }
+      default:
+        return { success: false, error: 'Unknown list' };
     }
 
-    if (isUsed) {
-      const err = 'Cannot delete an option that is currently in use. Deactivate it instead.';
-      addToast({ message: err, type: 'danger' });
-      return { success: false, error: err };
-    }
-
-    addToast({ message: 'Option deleted.', type: 'info' });
+    logActivity('list', id, 'option_deleted', listName, null, null);
+    addToast({ message: 'Option deleted successfully.', type: 'info' });
     return { success: true };
   };
 
@@ -945,6 +1310,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetAllData = () => {
     localStorage.clear();
+    setUsers(initialUsers);
+    setCurrentUser(initialUsers[0]);
     setDepartments(initialDepartments);
     setSubDomains(initialSubDomains);
     setTeamMembers(initialTeamMembers);
@@ -1006,7 +1373,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         canEdit,
         isAdmin,
+        isEA,
         isCeoViewer,
+        isViewer,
+        addUser,
+        updateUser,
+        toggleUserStatus,
+        deleteUser,
+        switchUser,
+        isAuthenticated,
+        login,
+        logout,
+        isAppLocked,
+        lockApp,
+        unlockApp,
+        hasPinConfigured,
+        setupPin,
+        changePin,
+        resetPin,
+        autoLockMinutes,
+        setAutoLockMinutes,
+        lockOnTabBlur,
+        setLockOnTabBlur,
+        changeUserPassword,
         activeNav,
         setActiveNav,
         density,

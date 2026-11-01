@@ -5,6 +5,9 @@
 
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { useAutoLock } from './hooks/useAutoLock';
+import { LoginView } from './components/auth/LoginView';
+import { LockScreenView } from './components/auth/LockScreenView';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -21,7 +24,19 @@ import { CommandPalette } from './components/dialogs/CommandPalette';
 import { ToastContainer } from './components/common/ToastContainer';
 
 const MainLayout: React.FC = () => {
-  const { activeNav, isSidebarCollapsed } = useApp();
+  const { activeNav, isSidebarCollapsed, isAuthenticated, isAppLocked } = useApp();
+
+  // Attach auto-lock listeners (inactivity countdown + tab visibility/blur)
+  useAutoLock();
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <LoginView />
+        <ToastContainer />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex">
@@ -55,6 +70,9 @@ const MainLayout: React.FC = () => {
       <ParentCascadeDialog />
       <CommandPalette />
       <ToastContainer />
+
+      {/* 6-Digit PIN App Lock Veil Overlay */}
+      {isAppLocked && <LockScreenView />}
     </div>
   );
 };

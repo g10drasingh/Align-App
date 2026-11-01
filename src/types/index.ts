@@ -3,15 +3,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'ea' | 'admin' | 'ceo_viewer';
+export type UserRole = 'ea' | 'admin' | 'ceo_viewer' | 'viewer';
 
 export interface AppUser {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  departmentId?: string;
   isActive: boolean;
   avatar?: string;
+  createdAt?: string;
+  password?: string;
+}
+
+export interface SecuritySettings {
+  autoLockMinutes: number; // 0 for Never, 1, 5, 15, 30
+  lockOnTabBlur: boolean;
+  hasPin: boolean;
 }
 
 export interface Department {
