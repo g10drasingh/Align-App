@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light dark;
+
+  /* ---------- Neutrals ---------- */
+  --bg: #F6F7F9;
+  --surface: #FFFFFF;
+  --surface-2: #EEF0F4;
+  --surface-3: #E4E8EE;
+  --border: #DDE1E8;
+  --border-strong: #C3CAD5;
+  --text: #14181F;
+  --text-2: #4A5463;
+  --text-3: #5B6676;
+  --text-inverse: #FFFFFF;
+
+  /* ---------- Brand: eSewa Green (Replaces Cobalt) ---------- */
+  --brand-600: #419B2A;
+  --brand-700: #2E7D32;
+  --brand-subtle: #E8F5E9;
+  --brand-border: #A5D6A7;
+  --focus-ring: #419B2A;
+
+  /* ---------- Needs CEO attention (strictly reserved plum) ---------- */
+  --attention-fg: #8E2A78;
+  --attention-bg: #FBE9F5;
+  --attention-border: #E9B4DA;
+  --attention-row: rgba(142, 42, 120, 0.05);
+
+  /* ---------- Semantic pairs ---------- */
+  --danger-fg: #C62828;     --danger-bg: #FDECEC;
+  --due-today-fg: #B8390A;  --due-today-bg: #FFEEDD;
+  --due-soon-fg: #8F5806;   --due-soon-bg: #FEF6D8;
+  --ontrack-fg: #4A5463;    --ontrack-bg: #EEF0F4;
+  --success-fg: #17713F;    --success-bg: #E3F4EA;
+  --info-fg: #2E7D32;       --info-bg: #E8F5E9;
+  --review-fg: #0D6B64;     --review-bg: #DDF3F0;
+  --blocked-fg: #B42318;    --blocked-bg: #FDECEA;
+  --cancelled-fg: #5B6676;  --cancelled-bg: #EEF0F4;
+
+  --scrim: rgba(20, 24, 31, 0.45);
+
+  /* ---------- Chart Palette ---------- */
+  --chart-1: #419B2A; --chart-2: #0F766E; --chart-3: #B7791F;
+  --chart-4: #64748B; --chart-5: #6D4ED6; --chart-6: #1D8FCB;
+
+  /* ---------- Shadows ---------- */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.10);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16);
+
+  /* ---------- Type ---------- */
+  --font-sans: "IBM Plex Sans", "Noto Sans Devanagari", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+/* Dark: manual choice */
+:root[data-theme="dark"] {
+  --bg: #0E1116;
+  --surface: #151A22;
+  --surface-2: #1C222C;
+  --surface-3: #252D39;
+  --border: #2A323E;
+  --border-strong: #3A4452;
+  --text: #E8ECF2;
+  --text-2: #A9B3C2;
+  --text-3: #8591A3;
+  --text-inverse: #0E1116;
+
+  /* eSewa green softened for dark mode */
+  --brand-600: #66BB6A;
+  --brand-700: #81C784;
+  --brand-subtle: #14331D;
+  --brand-border: #255D34;
+  --focus-ring: #66BB6A;
+
+  --attention-fg: #F08FD4;
+  --attention-bg: #3A1430;
+  --attention-border: #6B2A5A;
+  --attention-row: rgba(240, 143, 212, 0.08);
+
+  --danger-fg: #FF8A80;     --danger-bg: #3A1618;
+  --due-today-fg: #FFA666;  --due-today-bg: #3A2410;
+  --due-soon-fg: #F2C94C;   --due-soon-bg: #33290F;
+  --ontrack-fg: #A9B3C2;    --ontrack-bg: #1C222C;
+  --success-fg: #5FD08F;    --success-bg: #12301F;
+  --info-fg: #66BB6A;       --info-bg: #14331D;
+  --review-fg: #5CCBC0;     --review-bg: #0F2E2B;
+  --blocked-fg: #FF8F85;    --blocked-bg: #3A1816;
+  --cancelled-fg: #8591A3;  --cancelled-bg: #1C222C;
+
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --chart-1: #66BB6A; --chart-2: #5CCBC0; --chart-3: #E5B454;
+  --chart-4: #94A3B8; --chart-5: #A99BF0; --chart-6: #6DBDE8;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1116;
+    --surface: #151A22;
+    --surface-2: #1C222C;
+    --surface-3: #252D39;
+    --border: #2A323E;
+    --border-strong: #3A4452;
+    --text: #E8ECF2;
+    --text-2: #A9B3C2;
+    --text-3: #8591A3;
+    --text-inverse: #0E1116;
+
+    --brand-600: #66BB6A;
+    --brand-700: #81C784;
+    --brand-subtle: #14331D;
+    --brand-border: #255D34;
+    --focus-ring: #66BB6A;
+
+    --attention-fg: #F08FD4;
+    --attention-bg: #3A1430;
+    --attention-border: #6B2A5A;
+    --attention-row: rgba(240, 143, 212, 0.08);
+
+    --danger-fg: #FF8A80;     --danger-bg: #3A1618;
+    --due-today-fg: #FFA666;  --due-today-bg: #3A2410;
+    --due-soon-fg: #F2C94C;   --due-soon-bg: #33290F;
+    --ontrack-fg: #A9B3C2;    --ontrack-bg: #1C222C;
+    --success-fg: #5FD08F;    --success-bg: #12301F;
+    --info-fg: #66BB6A;       --info-bg: #14331D;
+    --review-fg: #5CCBC0;     --review-bg: #0F2E2B;
+    --blocked-fg: #FF8F85;    --blocked-bg: #3A1816;
+    --cancelled-fg: #8591A3;  --cancelled-bg: #1C222C;
+
+    --scrim: rgba(0, 0, 0, 0.6);
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+body {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.43;
+}
+
+:lang(ne) {
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Diagonal hatch pattern for Blocked badges */
+.hatch-blocked {
+  background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(180, 35, 24, 0.12) 4px 6px);
+}
+
+/* Custom scrollbar for dense tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}

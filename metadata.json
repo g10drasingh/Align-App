@@ -1,0 +1,6 @@
+{
+  "name": "Align",
+  "description": "Executive project management ledger for the G&E department and CEO Office, styled in an eSewa-matching emerald green theme.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
