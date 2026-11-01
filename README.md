@@ -2,7 +2,7 @@
 
 > **A high-density executive ledger built for the Executive Assistant (EA) to the CEO to track projects, follow-ups, meetings, and high-stakes executive attention across the G&E department.**
 
-Designed in an **eSewa-inspired emerald green palette** (`#419B2A` / `#60BB46`) with a single reserved **executive plum** (`#8E2A78`) reserved exclusively for **Needs CEO Attention**.
+Designed in an **Emerald Green Palette** (`#419B2A` / `#60BB46`) with a single reserved **executive plum** (`#8E2A78`) reserved exclusively for **Needs CEO Attention**.
 
 ---
 
@@ -60,9 +60,9 @@ Align incorporates role-based access control (RBAC):
 
 ---
 
-## 🎨 Design System & eSewa Palette
+## 🎨 Design System &  Palette
 
-- **Brand Primary**: eSewa Emerald (`#419B2A` / `#60BB46` / Dark: `#66BB6A`)
+- **Brand Primary**: Emerald Green (`#419B2A` / `#60BB46` / Dark: `#66BB6A`)
 - **Executive Signal**: Attention Plum (`#8E2A78` / Dark: `#F08FD4`) — strictly reserved for CEO Attention
 - **Typography**: IBM Plex Sans + Noto Sans Devanagari fallback with tabular numerals (`tabular-nums`)
 - **Density**: Comfortable (44px rows) and Compact (36px rows) modes
