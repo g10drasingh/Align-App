@@ -1,9 +1,27 @@
+# Dependencies
 node_modules/
-build/
+
+# Production build outputs
 dist/
+build/
 coverage/
+
+# OS & system files
 .DS_Store
+Thumbs.db
 *.log
+npm-debug.log*
+yarn-debug.log*
+bun.lock*
+
+# Local environment configuration
 .env*
 !.env.example
+
+# AI Studio & tooling directories/artifacts
+.aistudio/
+/.aistudio/
+public/assets/aistudio/
 .playwright-cli/
+.gemini/
+*.artifact
