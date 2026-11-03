@@ -64,6 +64,9 @@ export const ItemDetailDrawer: React.FC = () => {
     priorities,
     categories,
     ceoAttentionStatuses,
+    setIsNewItemOpen,
+    setNewItemDefaultType,
+    setNewItemDefaultParentId,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'followups' | 'links' | 'activity'>('overview');
@@ -83,6 +86,10 @@ export const ItemDetailDrawer: React.FC = () => {
   if (!selectedItemId) return null;
   const item = workItems.find((w) => w.id === selectedItemId);
   if (!item) return null;
+
+  const isProject = item.itemType === 'project';
+  const subItemsLabel = isProject ? 'Sub-projects' : 'Subtasks';
+  const subItemSingular = isProject ? 'Sub-project' : 'Subtask';
 
   const status = statusMap.get(item.statusId);
   const priority = priorityMap.get(item.priorityId);
@@ -145,6 +152,51 @@ export const ItemDetailDrawer: React.FC = () => {
 
             <div className="flex items-center gap-2 shrink-0">
               {canEdit && (
+                <div className="flex items-center gap-1.5 mr-1">
+                  {isProject ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setNewItemDefaultType('project');
+                          setNewItemDefaultParentId(item.id);
+                          setIsNewItemOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded bg-[var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+                        title="Add a sub-project under this project"
+                      >
+                        <Plus className="h-3 w-3 text-[var(--brand-600)]" />
+                        <span>Sub-project</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNewItemDefaultType('task');
+                          setNewItemDefaultParentId(item.id);
+                          setIsNewItemOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
+                        title="Add a task under this project"
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>Task</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setNewItemDefaultType('task');
+                        setNewItemDefaultParentId(item.id);
+                        setIsNewItemOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
+                      title="Add a subtask under this task"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>Subtask</span>
+                    </button>
+                  )}
+                </div>
+              )}
+              {canEdit && (
                 <button
                   onClick={() => {
                     archiveWorkItem(item.id);
@@ -185,7 +237,7 @@ export const ItemDetailDrawer: React.FC = () => {
                   : 'text-[var(--text-2)] hover:text-[var(--text)]'
               }`}
             >
-              Children & Weights ({children.length})
+              {subItemsLabel} & Weights ({children.length})
             </button>
             <button
               onClick={() => setActiveTab('followups')}
@@ -430,28 +482,113 @@ export const ItemDetailDrawer: React.FC = () => {
               </div>
             )}
 
-            {/* 2. CHILDREN & WEIGHTS TAB */}
+            {/* 2. SUB-ITEMS & WEIGHTS TAB */}
             {activeTab === 'children' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-xs font-bold text-[var(--text)]">Children Weights Breakdown</h3>
+                    <h3 className="text-xs font-bold text-[var(--text)]">{subItemsLabel} & Weights Breakdown</h3>
                     <p className="text-xs text-[var(--text-3)]">
                       Priority caps enforce fair progress rollups. Manual weights freeze and rebalance remaining siblings.
                     </p>
                   </div>
+
+                  {canEdit && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isProject ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              setNewItemDefaultType('project');
+                              setNewItemDefaultParentId(item.id);
+                              setIsNewItemOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5 text-[var(--brand-600)]" />
+                            <span>Add Sub-project</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setNewItemDefaultType('task');
+                              setNewItemDefaultParentId(item.id);
+                              setIsNewItemOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Add Task</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setNewItemDefaultType('task');
+                            setNewItemDefaultParentId(item.id);
+                            setIsNewItemOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add Subtask</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {children.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--text-3)]">
-                    No children items under this {item.itemType}.
+                  <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--text-3)] flex flex-col items-center justify-center gap-3">
+                    <p>No {subItemsLabel.toLowerCase()} created under this {isProject ? 'project' : 'task'} yet.</p>
+                    {canEdit && (
+                      <div className="flex items-center gap-2 pt-1">
+                        {isProject ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setNewItemDefaultType('project');
+                                setNewItemDefaultParentId(item.id);
+                                setIsNewItemOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5 text-[var(--brand-600)]" />
+                              <span>Create Sub-project</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setNewItemDefaultType('task');
+                                setNewItemDefaultParentId(item.id);
+                                setIsNewItemOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs cursor-pointer"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              <span>Create Task</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setNewItemDefaultType('task');
+                              setNewItemDefaultParentId(item.id);
+                              setIsNewItemOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Create Subtask</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-md border border-[var(--border)] overflow-hidden">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[var(--surface-2)] border-b border-[var(--border)] font-semibold text-[var(--text-2)]">
                         <tr>
-                          <th className="p-2.5">Child</th>
+                          <th className="p-2.5">{subItemSingular}</th>
                           <th className="p-2.5">Priority</th>
                           <th className="p-2.5 text-center">Leaves</th>
                           <th className="p-2.5 text-right">Weight</th>
@@ -470,7 +607,12 @@ export const ItemDetailDrawer: React.FC = () => {
                                 className="p-2.5 font-medium text-[var(--text)] cursor-pointer hover:underline"
                                 onClick={() => setSelectedItemId(child.id)}
                               >
-                                {child.name}
+                                <div className="flex items-center gap-1.5">
+                                  <span className="rounded bg-[var(--surface-3)] px-1.5 py-0.2 text-[10px] font-bold text-[var(--text-3)] uppercase">
+                                    {child.itemType}
+                                  </span>
+                                  <span>{child.name}</span>
+                                </div>
                               </td>
                               <td className="p-2.5 text-[var(--text-2)]">
                                 {childPrio?.name} (Cap {childPrio?.weightCap}%)

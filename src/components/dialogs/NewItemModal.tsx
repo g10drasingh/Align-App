@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Flag, FolderPlus, ListPlus, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { ItemType, Priority, TaskKind, WorkItem } from '../../types';
@@ -38,6 +38,30 @@ export const NewItemModal: React.FC = () => {
   const [taskKind, setTaskKind] = useState<TaskKind>('one_time');
   const [needsCeoAttention, setNeedsCeoAttention] = useState(false);
   const [ceoNote, setCeoNote] = useState('');
+
+  // Keep form synchronized whenever modal is opened
+  useEffect(() => {
+    if (isNewItemOpen) {
+      setItemType(newItemDefaultType);
+      setParentId(newItemDefaultParentId || '');
+      setName('');
+      setDescription('');
+      if (newItemDefaultParentId) {
+        const parent = workItems.find((w) => w.id === newItemDefaultParentId);
+        if (parent) {
+          if (parent.departmentIds && parent.departmentIds[0]) {
+            setDepartmentId(parent.departmentIds[0]);
+          }
+          if (parent.subDomainIds && parent.subDomainIds[0]) {
+            setSubDomainId(parent.subDomainIds[0]);
+          }
+          if (parent.categoryId) {
+            setCategoryId(parent.categoryId);
+          }
+        }
+      }
+    }
+  }, [isNewItemOpen, newItemDefaultType, newItemDefaultParentId, workItems]);
 
   if (!isNewItemOpen) return null;
 
