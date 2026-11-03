@@ -124,12 +124,21 @@ jobs:
           if [[ -f package-lock.json ]]; then npm ci; else npm install --no-audit --no-fund; fi
           npm install --no-save --no-audit --no-fund @tauri-apps/cli@^2
 
-      - name: Scaffold Tauri (skipped if src-tauri already exists)
+      - name: Scaffold Tauri (skipped if src-tauri/tauri.conf.json already exists)
         run: |
           if [[ -f src-tauri/tauri.conf.json ]]; then
-            echo "src-tauri already present - leaving it as is"
+            echo "src-tauri/tauri.conf.json already present - leaving it as is"
             exit 0
           fi
+
+          # A partial src-tauri/ (e.g. only committed icons) makes `tauri init`
+          # skip itself, so back the icons up, start clean, then restore them.
+          ICONS_BAK=""
+          if [[ -d src-tauri/icons ]]; then
+            ICONS_BAK="$(mktemp -d)"
+            cp -R src-tauri/icons "$ICONS_BAK/icons"
+          fi
+          rm -rf src-tauri
 
           PORT="$(grep -hoE '(--port[= ]+|port: *)[0-9]+' package.json vite.config.* 2>/dev/null | grep -oE '[0-9]+$' | head -n 1 || true)"
           PORT="${PORT:-3000}"
@@ -143,6 +152,17 @@ jobs:
             --dev-url "http://localhost:$PORT" \
             --before-dev-command "npm run dev" \
             --before-build-command "npm run build -- --base=./"
+
+          if [[ -n "$ICONS_BAK" ]]; then
+            rm -rf src-tauri/icons
+            cp -R "$ICONS_BAK/icons" src-tauri/icons
+            echo "Restored committed icons"
+          fi
+
+          if [[ ! -f src-tauri/tauri.conf.json ]]; then
+            echo "::error::tauri init did not create src-tauri/tauri.conf.json"
+            exit 1
+          fi
 
           node <<'EOF'
           const fs = require('fs');
@@ -181,10 +201,10 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Generate app icons
+      - name: Generate app icons (only if none are committed)
         run: |
-          if [[ -n "$(git ls-files src-tauri/icons | head -n 1)" ]]; then
-            echo "Using icons committed in src-tauri/icons"
+          if [[ -f src-tauri/icons/icon.ico && -f src-tauri/icons/icon.icns && -f src-tauri/icons/128x128.png ]]; then
+            echo "Using icons already in src-tauri/icons"
             exit 0
           fi
 
@@ -193,29 +213,8 @@ jobs:
           elif [[ -f align-icon.svg ]] && npx tauri icon align-icon.svg; then
             echo "Icons generated from align-icon.svg"
           else
-            echo "::warning::align-icon.png/svg missing or not square - using a placeholder icon."
-            node <<'EOF'
-            const zlib = require('zlib'), fs = require('fs');
-            const S = 1024;
-            const row = Buffer.alloc(1 + S * 4);
-            for (let x = 0; x < S; x++) {
-              row[1 + x * 4] = 0x41; row[2 + x * 4] = 0x9B; row[3 + x * 4] = 0x2A; row[4 + x * 4] = 255;
-            }
-            const raw = Buffer.concat(Array(S).fill(row));
-            function chunk(t, d) {
-              const len = Buffer.alloc(4); len.writeUInt32BE(d.length);
-              const td = Buffer.concat([Buffer.from(t), d]);
-              const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td) >>> 0);
-              return Buffer.concat([len, td, crc]);
-            }
-            const ihdr = Buffer.alloc(13);
-            ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 6;
-            fs.writeFileSync('.placeholder-icon.png', Buffer.concat([
-              Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-              chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))
-            ]));
-            EOF
-            npx tauri icon .placeholder-icon.png
+            echo "::error::No usable icons: commit src-tauri/icons or a square align-icon.png/svg."
+            exit 1
           fi
 
       - name: Apply release version
@@ -239,19 +238,25 @@ jobs:
           tauriScript: npx tauri
           tagName: v${{ needs.gate.outputs.version }}
           releaseName: 'Align v${{ needs.gate.outputs.version }}'
+          releaseDraft: true
+          prerelease: false
+          commitish: ${{ github.sha }}
+          args: ${{ matrix.args }}
           releaseBody: |
             **Align** - executive project management ledger for tracking projects, follow-ups, meetings and items that need CEO attention.
+
             ### Install
-             **Windows:** Run the `.exe` or `.msi`. If SmartScreen appears, click "More info", then "Run anyway".
-            **macOS:** Open the `.dmg` (`aarch64` = Apple Silicon, `x64` = Intel) and drag Align to Applications. Because the app is currently unsigned, run the following command once in Terminal:
-              ```bash
-              xattr -cr /Applications/Align.app
+
+            **Windows:** Run the `.exe` or `.msi`. If SmartScreen appears, click "More info", then "Run anyway".
+
+            **macOS:** Open the `.dmg` (`aarch64` = Apple Silicon, `x64` = Intel) and drag Align to Applications. The app is currently unsigned, so run this once in Terminal:
+
+            ```bash
+            xattr -cr /Applications/Align.app
+            ```
+
             **Linux:** use the `.AppImage` (`chmod +x` first), `.deb` or `.rpm`.
-                      releaseDraft: true
-                      prerelease: false
-                      commitish: ${{ github.sha }}
-                      args: ${{ matrix.args }}
-            
+
   # Un-drafts the release once every platform build has uploaded successfully.
   publish:
     needs: [gate, release]
