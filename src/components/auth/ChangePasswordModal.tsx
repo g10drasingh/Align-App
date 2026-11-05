@@ -60,34 +60,34 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 select-none">
-      <div className="w-full max-w-md rounded-xl border border-amber-500/30 bg-slate-900 p-6 shadow-2xl text-slate-100 relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 select-none">
+      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl text-[var(--text)] relative">
         {/* Security Warning Icon */}
-        <div className="mx-auto w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-4 shadow-lg shadow-amber-950/40">
+        <div className="mx-auto w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4 shadow-sm">
           <ShieldAlert className="w-6 h-6" />
         </div>
 
         <div className="text-center mb-5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
             Mandatory Security Requirement
           </span>
-          <h2 className="text-lg font-bold text-white mt-2">Change Default Password</h2>
-          <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-            You are signed in with the default credentials for <strong className="text-slate-200">{currentUser.email}</strong>.
+          <h2 className="text-lg font-bold text-[var(--text)] mt-2">Change Default Password</h2>
+          <p className="text-xs text-[var(--text-2)] mt-1 leading-relaxed">
+            You are signed in with the default credentials for <strong className="text-[var(--text)]">{currentUser.email}</strong>.
             Before accessing the production workspace, you must create a new secure password.
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-            <div className="leading-relaxed">{error}</div>
+          <div className="mb-4 p-3 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-fg)]/20 text-[var(--danger-fg)] text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="leading-relaxed font-medium">{error}</div>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-2)] mb-1">
               Current Default Password
             </label>
             <div className="relative">
@@ -97,13 +97,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password (default: admin)"
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] text-xs focus:ring-2 focus:ring-[var(--brand-600)] focus:border-transparent focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-2)] mb-1">
               New Password (minimum 6 characters)
             </label>
             <input
@@ -113,12 +113,12 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Enter your new secure password"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] text-xs focus:ring-2 focus:ring-[var(--brand-600)] focus:border-transparent focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-2)] mb-1">
               Confirm New Password
             </label>
             <input
@@ -128,17 +128,17 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirm your new password"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border-strong)] text-[var(--text)] text-xs focus:ring-2 focus:ring-[var(--brand-600)] focus:border-transparent focus:outline-none"
             />
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
+            <label className="flex items-center gap-1.5 text-xs text-[var(--text-3)] hover:text-[var(--text)] cursor-pointer">
               <input
                 type="checkbox"
                 checked={showPasswords}
                 onChange={(e) => setShowPasswords(e.target.checked)}
-                className="rounded border-slate-700 bg-slate-950 text-emerald-500"
+                className="rounded border-[var(--border-strong)] text-[var(--brand-600)] focus:ring-[var(--brand-600)] cursor-pointer"
               />
               <span>Show passwords</span>
             </label>
@@ -147,7 +147,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full mt-3 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-950 cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full mt-3 py-2.5 px-4 rounded-lg bg-[var(--brand-600)] hover:bg-[var(--brand-700)] text-white font-semibold text-xs shadow-xs cursor-pointer transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>Update Password & Continue</span>

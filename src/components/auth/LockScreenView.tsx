@@ -90,30 +90,30 @@ export const LockScreenView: React.FC = () => {
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xl p-4 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 select-none">
       <div
-        className={`w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-7 text-center relative text-slate-100 transition-transform ${
+        className={`w-full max-w-sm bg-[var(--surface)] border border-[var(--border)] rounded-2xl shadow-2xl p-7 text-center relative text-[var(--text)] transition-transform ${
           isShaking ? 'animate-shake' : ''
         }`}
       >
         {/* Header Icon */}
-        <div className="mx-auto w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-lg shadow-emerald-950/50">
+        <div className="mx-auto w-14 h-14 rounded-2xl bg-[var(--brand-subtle)] border border-[var(--brand-border)] flex items-center justify-center text-[var(--brand-600)] mb-4 shadow-xs">
           {!hasPinConfigured ? <KeyRound className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
         </div>
 
         {/* User identification */}
         <div className="mb-2">
-          <div className="text-xs font-medium text-emerald-400 uppercase tracking-wider mb-0.5">
+          <div className="text-xs font-semibold text-[var(--brand-600)] uppercase tracking-wider mb-0.5">
             {!hasPinConfigured ? 'Security Setup' : 'Session Locked'}
           </div>
-          <h2 className="text-xl font-bold text-white tracking-tight">
+          <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">
             {!hasPinConfigured
               ? setupStep === 'create'
                 ? 'Create 6-Digit PIN'
                 : 'Confirm 6-Digit PIN'
               : 'Enter 6-Digit PIN'}
           </h2>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[var(--text-2)] mt-1">
             {!hasPinConfigured
               ? setupStep === 'create'
                 ? 'Choose a memorable 6-digit code to lock and secure this device.'
@@ -124,7 +124,7 @@ export const LockScreenView: React.FC = () => {
 
         {/* Error message */}
         <div className="h-5 mb-3 flex items-center justify-center">
-          {error && <span className="text-xs font-medium text-rose-400">{error}</span>}
+          {error && <span className="text-xs font-semibold text-[var(--danger-fg)]">{error}</span>}
         </div>
 
         {/* 6 Dots Indicator */}
@@ -136,8 +136,8 @@ export const LockScreenView: React.FC = () => {
                 key={index}
                 className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
                   isFilled
-                    ? 'bg-emerald-400 scale-110 shadow-[0_0_10px_rgba(52,211,153,0.6)]'
-                    : 'bg-slate-700 border border-slate-600'
+                    ? 'bg-[var(--brand-600)] scale-110 shadow-xs'
+                    : 'bg-[var(--surface-3)] border border-[var(--border-strong)]'
                 }`}
               />
             );
@@ -151,7 +151,7 @@ export const LockScreenView: React.FC = () => {
               key={digit}
               type="button"
               onClick={() => handleDigit(digit)}
-              className="h-14 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 active:bg-emerald-600/30 border border-slate-700/60 text-xl font-semibold text-white transition-all cursor-pointer flex items-center justify-center hover:scale-[1.03] active:scale-95"
+              className="h-14 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] active:bg-[var(--brand-subtle)] border border-[var(--border)] text-xl font-semibold text-[var(--text)] transition-all cursor-pointer flex items-center justify-center hover:scale-[1.03] active:scale-95"
             >
               {digit}
             </button>
@@ -159,7 +159,7 @@ export const LockScreenView: React.FC = () => {
           <button
             type="button"
             onClick={handleClear}
-            className="h-14 rounded-xl bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 text-xs font-medium text-slate-400 hover:text-slate-200 transition-all cursor-pointer flex items-center justify-center"
+            className="h-14 rounded-xl bg-[var(--surface-2)]/60 hover:bg-[var(--surface-3)] border border-[var(--border)] text-xs font-medium text-[var(--text-3)] hover:text-[var(--text)] transition-all cursor-pointer flex items-center justify-center"
             title="Clear"
           >
             Clear
@@ -167,14 +167,14 @@ export const LockScreenView: React.FC = () => {
           <button
             type="button"
             onClick={() => handleDigit('0')}
-            className="h-14 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 active:bg-emerald-600/30 border border-slate-700/60 text-xl font-semibold text-white transition-all cursor-pointer flex items-center justify-center hover:scale-[1.03] active:scale-95"
+            className="h-14 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-3)] active:bg-[var(--brand-subtle)] border border-[var(--border)] text-xl font-semibold text-[var(--text)] transition-all cursor-pointer flex items-center justify-center hover:scale-[1.03] active:scale-95"
           >
             0
           </button>
           <button
             type="button"
             onClick={handleBackspace}
-            className="h-14 rounded-xl bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40 text-slate-300 hover:text-rose-300 transition-all cursor-pointer flex items-center justify-center"
+            className="h-14 rounded-xl bg-[var(--surface-2)]/60 hover:bg-[var(--surface-3)] border border-[var(--border)] text-[var(--text-2)] hover:text-[var(--danger-fg)] transition-all cursor-pointer flex items-center justify-center"
             title="Backspace"
           >
             <Delete className="w-5 h-5" />
@@ -182,11 +182,11 @@ export const LockScreenView: React.FC = () => {
         </div>
 
         {/* Footer actions */}
-        <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="pt-4 border-t border-[var(--border)] flex items-center justify-between text-xs text-[var(--text-3)]">
           <button
             type="button"
             onClick={logout}
-            className="flex items-center gap-1.5 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-[var(--text-3)] hover:text-[var(--danger-fg)] transition-colors cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
@@ -201,12 +201,12 @@ export const LockScreenView: React.FC = () => {
                 setPin('');
                 setError(null);
               }}
-              className="text-emerald-400 hover:underline cursor-pointer"
+              className="text-[var(--brand-600)] hover:underline cursor-pointer font-medium"
             >
               Start over
             </button>
           ) : (
-            <span className="text-[11px] text-slate-500">Keyboard 0-9 supported</span>
+            <span className="text-[11px] text-[var(--text-3)]">Keyboard 0-9 supported</span>
           )}
         </div>
       </div>
