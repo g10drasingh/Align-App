@@ -32,9 +32,7 @@ export const ProjectsView: React.FC = () => {
     dueSoonWindow,
     setSelectedItemId,
     canEdit,
-    setIsNewItemOpen,
-    setNewItemDefaultType,
-    setNewItemDefaultParentId,
+    openCreateModal,
   } = useApp();
 
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
@@ -87,9 +85,11 @@ export const ProjectsView: React.FC = () => {
           {canEdit && (
             <button
               onClick={() => {
-                setNewItemDefaultType('project');
-                setNewItemDefaultParentId(null);
-                setIsNewItemOpen(true);
+                openCreateModal({
+                  type: 'project',
+                  mode: 'project',
+                  parentId: null,
+                });
               }}
               className="flex items-center gap-1.5 rounded-md bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors cursor-pointer"
             >
@@ -141,9 +141,7 @@ const ProjectTreeNode: React.FC<ProjectTreeNodeProps> = ({
     departmentMap,
     setSelectedItemId,
     canEdit,
-    setIsNewItemOpen,
-    setNewItemDefaultType,
-    setNewItemDefaultParentId,
+    openCreateModal,
     todayStr,
     dueSoonWindow,
   } = useApp();
@@ -151,6 +149,8 @@ const ProjectTreeNode: React.FC<ProjectTreeNodeProps> = ({
   const isExpanded = !!expandedNodes[item.id];
   const children = workItems.filter((w) => w.parentId === item.id && !w.isArchived);
   const hasChildren = children.length > 0;
+  const isProject = item.itemType === 'project';
+  const isSubProject = isProject && Boolean(item.parentId);
 
   const { progress, childWeights } = computeItemProgressAndWeights(
     item,
@@ -190,7 +190,7 @@ const ProjectTreeNode: React.FC<ProjectTreeNodeProps> = ({
             <div className="w-6" />
           )}
 
-          {item.itemType === 'project' ? (
+          {isProject ? (
             <Folder className="h-4 w-4 text-[var(--brand-600)] shrink-0" />
           ) : (
             <div className="h-2 w-2 rounded-full bg-[var(--text-3)] shrink-0" />
@@ -204,7 +204,7 @@ const ProjectTreeNode: React.FC<ProjectTreeNodeProps> = ({
             <span className="text-xs font-semibold text-[var(--text)] truncate">
               {item.name}
             </span>
-            {item.itemType === 'project' && (
+            {isProject && (
               <span className="ml-2 text-[11px] text-[var(--text-3)] font-medium">
                 {leaves === 0 ? 'No tasks yet' : `${leaves} ${leaves === 1 ? 'task' : 'tasks'}`}
               </span>
@@ -256,20 +256,60 @@ const ProjectTreeNode: React.FC<ProjectTreeNodeProps> = ({
             {item.dueDate ? `Due ${item.dueDate}` : '—'}
           </span>
 
-          {/* Quick add child button (EA only) */}
+          {/* Quick add actions adhering to hierarchy rules */}
           {canEdit && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setNewItemDefaultType(item.itemType === 'project' ? 'task' : 'task');
-                setNewItemDefaultParentId(item.id);
-                setIsNewItemOpen(true);
-              }}
-              title={`Add ${item.itemType === 'project' ? 'task' : 'subtask'} inside`}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--surface-3)] text-[var(--brand-600)] transition-opacity cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+              {isProject ? (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCreateModal({
+                        type: 'project',
+                        mode: 'sub_project',
+                        parentId: item.id,
+                      });
+                    }}
+                    title="Add Sub-project inside"
+                    className="p-1 rounded hover:bg-[var(--surface-3)] text-[var(--brand-600)] cursor-pointer text-[10px] font-semibold flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Sub-project</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCreateModal({
+                        type: 'task',
+                        mode: 'task',
+                        parentId: item.id,
+                      });
+                    }}
+                    title="Add Task inside"
+                    className="p-1 rounded hover:bg-[var(--surface-3)] text-[var(--brand-600)] cursor-pointer text-[10px] font-semibold flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Task</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openCreateModal({
+                      type: 'task',
+                      mode: 'sub_task',
+                      parentId: item.id,
+                    });
+                  }}
+                  title="Add Subtask inside"
+                  className="p-1 rounded hover:bg-[var(--surface-3)] text-[var(--brand-600)] cursor-pointer text-[10px] font-semibold flex items-center gap-0.5"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>Subtask</span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

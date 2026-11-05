@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Archive,
   Check,
@@ -29,9 +29,23 @@ import {
   Key,
   Laptop,
   EyeOff,
+  Download,
+  Upload,
+  Database,
+  Sparkles,
+  AlertCircle,
+  ExternalLink,
+  HardDrive,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { UserRole } from '../../types';
+import {
+  CURRENT_APP_VERSION,
+  detectPlatform,
+  loadUpdateSettings,
+  saveUpdateSettings,
+  UpdateFrequency,
+} from '../../services/updateService';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -70,9 +84,15 @@ export const SettingsView: React.FC = () => {
     lockOnTabBlur,
     setLockOnTabBlur,
     changeUserPassword,
+    updateInfo,
+    isCheckingUpdates,
+    checkUpdates,
+    setIsUpdateModalOpen,
+    exportDatabaseBackup,
+    restoreDatabaseBackup,
   } = useApp();
 
-  const [activeSection, setActiveSection] = useState<'lists' | 'general' | 'security' | 'users' | 'logs'>('lists');
+  const [activeSection, setActiveSection] = useState<'lists' | 'general' | 'security' | 'users' | 'logs' | 'updates'>('lists');
   const [selectedList, setSelectedList] = useState<string>('departments');
 
   // In-app delete confirmation modal state
@@ -96,6 +116,11 @@ export const SettingsView: React.FC = () => {
   const [passwordMessage, setPasswordMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [showPasswordFields, setShowPasswordFields] = useState(false);
 
+  // Software updates & database vault state
+  const [updateFreq, setUpdateFreq] = useState<UpdateFrequency>(() => loadUpdateSettings().frequency);
+  const [restoreStatus, setRestoreStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+
   // Add new list value modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newOptionName, setNewOptionName] = useState('');
@@ -108,7 +133,7 @@ export const SettingsView: React.FC = () => {
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('align@2026');
+  const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('viewer');
   const [newUserDeptId, setNewUserDeptId] = useState('');
   const [userActionError, setUserActionError] = useState<string | null>(null);
@@ -139,20 +164,24 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordMessage(null);
     if (newPasswordInput.length < 6) {
       setPasswordMessage({ text: 'New password must be at least 6 characters.', type: 'error' });
       return;
     }
+    if (newPasswordInput.toLowerCase() === 'admin') {
+      setPasswordMessage({ text: 'New password cannot be "admin". Please choose a secure password.', type: 'error' });
+      return;
+    }
     if (newPasswordInput !== confirmPasswordInput) {
       setPasswordMessage({ text: 'New passwords do not match.', type: 'error' });
       return;
     }
-    const res = changeUserPassword(currentUser.id, oldPasswordInput, newPasswordInput);
+    const res = await changeUserPassword(currentUser.id, oldPasswordInput, newPasswordInput);
     if (res.success) {
-      setPasswordMessage({ text: 'Password successfully updated.', type: 'success' });
+      setPasswordMessage({ text: 'Password successfully updated and secured.', type: 'success' });
       setOldPasswordInput('');
       setNewPasswordInput('');
       setConfirmPasswordInput('');
@@ -217,22 +246,22 @@ export const SettingsView: React.FC = () => {
     setNewOptionName('');
   };
 
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserActionError(null);
-    const res = addUser({
+    const res = await addUser({
       name: newUserName.trim(),
       email: newUserEmail.trim(),
       role: newUserRole,
       departmentId: newUserDeptId || undefined,
-      password: newUserPassword.trim() || 'align@2026',
+      password: newUserPassword.trim() || undefined,
       isActive: true,
     });
     if (res.success) {
       setIsAddUserModalOpen(false);
       setNewUserName('');
       setNewUserEmail('');
-      setNewUserPassword('align@2026');
+      setNewUserPassword('');
       setNewUserRole('viewer');
       setNewUserDeptId('');
     } else {
@@ -295,6 +324,23 @@ export const SettingsView: React.FC = () => {
         >
           <SettingsIcon className="h-4 w-4" />
           <span>General Settings</span>
+        </button>
+        <button
+          onClick={() => setActiveSection('updates')}
+          className={`flex items-center gap-1.5 pb-2.5 px-3 font-medium transition-colors cursor-pointer relative ${
+            activeSection === 'updates'
+              ? 'border-b-2 border-[var(--brand-600)] text-[var(--brand-600)] font-semibold'
+              : 'text-[var(--text-2)] hover:text-[var(--text)]'
+          }`}
+        >
+          <Sparkles className="h-4 w-4" />
+          <span>Updates & Vault</span>
+          {updateInfo?.isAvailable && (
+            <span className="flex h-2 w-2 relative ml-0.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveSection('logs')}
@@ -963,7 +1009,7 @@ export const SettingsView: React.FC = () => {
               </div>
 
               <p className="text-xs text-[var(--text-2)] leading-relaxed">
-                Change your sign-in password for <span className="font-semibold text-[var(--text)]">{currentUser.name}</span>. Initial default was <code className="text-[var(--brand-600)] font-mono">align@2026</code>.
+                Change your sign-in password for <span className="font-semibold text-[var(--text)]">{currentUser.name}</span>. Secure passwords must contain at least 6 characters and cannot be "admin".
               </p>
 
               {passwordMessage && (
@@ -1137,6 +1183,276 @@ export const SettingsView: React.FC = () => {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 5. SOFTWARE UPDATES & DATABASE VAULT SECTION */}
+      {activeSection === 'updates' && (
+        <div className="space-y-6 max-w-4xl">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[var(--brand-600)]" />
+                <h2 className="text-sm font-bold text-[var(--text)]">Software Updates & Encrypted Vault</h2>
+              </div>
+              <p className="text-xs text-[var(--text-3)] mt-1">
+                Multi-platform release updater from GitHub with automated snapshot safety and hardware-accelerated AES-256 vault.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => checkUpdates(true)}
+                disabled={isCheckingUpdates}
+                className="flex items-center gap-1.5 rounded-md bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isCheckingUpdates ? 'animate-spin' : ''}`} />
+                <span>{isCheckingUpdates ? 'Checking GitHub...' : 'Check for Updates Now'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Card 1: Version & Platform Detection */}
+            <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <Laptop className="h-4 w-4 text-[var(--brand-600)]" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+                    App Version & Client Platform
+                  </h3>
+                </div>
+                <span className="font-mono text-xs font-bold text-[var(--brand-600)] bg-[var(--brand-subtle)] px-2 py-0.5 rounded border border-[var(--brand-border)]">
+                  v{CURRENT_APP_VERSION}
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/60">
+                  <span className="text-[var(--text-3)]">Installed Version:</span>
+                  <span className="font-mono font-semibold text-[var(--text)]">v{CURRENT_APP_VERSION}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/60">
+                  <span className="text-[var(--text-3)]">Detected Operating System:</span>
+                  <span className="font-semibold text-[var(--text)]">{detectPlatform().platformLabel}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/60">
+                  <span className="text-[var(--text-3)]">Architecture:</span>
+                  <span className="font-mono font-semibold text-[var(--text)]">{detectPlatform().architecture}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/60">
+                  <span className="text-[var(--text-3)]">Target Package Format:</span>
+                  <span className="font-mono font-semibold text-[var(--text)]">{detectPlatform().recommendedExtension}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/60">
+                  <span className="text-[var(--text-3)]">GitHub Repository:</span>
+                  <a
+                    href="https://github.com/g10drasingh/Align-App"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[var(--brand-600)] hover:underline flex items-center gap-1"
+                  >
+                    <span>g10drasingh/Align-App</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+
+              {updateInfo?.isAvailable ? (
+                <div className="rounded-md border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5" /> New Release Available: v{updateInfo.latestVersion}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300 leading-snug">
+                    {updateInfo.releaseName || `Align v${updateInfo.latestVersion}`} is ready for installation.
+                  </p>
+                  <button
+                    onClick={() => setIsUpdateModalOpen(true)}
+                    className="w-full flex items-center justify-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Download & Apply Update</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 text-xs text-[var(--text-2)] flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <span>Align is up to date. You are running the newest stable build.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Card 2: Automatic Check Schedule */}
+            <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xs space-y-4">
+              <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+                <Clock className="h-4 w-4 text-[var(--brand-600)]" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+                  Update Check Schedule
+                </h3>
+              </div>
+
+              <p className="text-xs text-[var(--text-2)] leading-relaxed">
+                Choose how frequently Align verifies whether a new release or desktop build is published on GitHub.
+              </p>
+
+              <div className="space-y-2 pt-1">
+                {[
+                  { value: 'on_open', label: 'Every app launch (Default Recommended)' },
+                  { value: 'daily', label: 'Daily (Every 24 hours)' },
+                  { value: 'weekly', label: 'Weekly (Every 7 days)' },
+                  { value: 'biweekly', label: 'Bi-Weekly (Every 15 days)' },
+                  { value: 'monthly', label: 'Monthly (Every 30 days)' },
+                  { value: 'manual', label: 'Manual check only' },
+                ].map((item) => (
+                  <label
+                    key={item.value}
+                    className={`flex items-center gap-2.5 p-2 rounded-md border cursor-pointer transition-colors text-xs ${
+                      updateFreq === item.value
+                        ? 'border-[var(--brand-border)] bg-[var(--brand-subtle)] text-[var(--brand-600)] font-semibold'
+                        : 'border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text-2)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="updateFrequency"
+                      value={item.value}
+                      checked={updateFreq === item.value}
+                      onChange={() => {
+                        const freq = item.value as UpdateFrequency;
+                        setUpdateFreq(freq);
+                        const curr = loadUpdateSettings();
+                        saveUpdateSettings({ ...curr, frequency: freq });
+                      }}
+                      className="text-[var(--brand-600)] focus:ring-[var(--brand-600)] cursor-pointer"
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-[var(--text-3)]">
+                Last checked:{' '}
+                <span className="font-medium text-[var(--text-2)]">
+                  {loadUpdateSettings().lastCheckedAt
+                    ? new Date(loadUpdateSettings().lastCheckedAt!).toLocaleString()
+                    : 'On app initialization'}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Zero Data Loss Guarantee & Vault Backup/Restore */}
+          <div className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xs space-y-5">
+            <div className="flex items-center gap-2 border-b border-[var(--border)] pb-3">
+              <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+                  Zero Data Loss Protection & Database Vault
+                </h3>
+                <p className="text-[11px] text-[var(--text-3)] mt-0.5">
+                  Hardware-accelerated AES-GCM 256-bit encryption for local storage with automated update snapshot safeguards
+                </p>
+              </div>
+            </div>
+
+            {/* Protection Guarantee Banner */}
+            <div className="rounded-md border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>Guaranteed Data Safety Across App Updates</span>
+              </div>
+              <p className="text-xs text-[var(--text-2)] leading-relaxed">
+                Updating your Align desktop app or browser environment <strong>never erases or overwrites</strong> your local ledger database. All work items, subtasks, executive agendas, meeting deliverables, users, and audit logs are isolated in the local device storage vault (<code className="font-mono text-[var(--brand-600)]">align_app_</code> namespace).
+              </p>
+              <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
+                Additionally, whenever an update installer is launched or downloaded, Align automatically creates an encrypted pre-update snapshot backup (<code className="font-mono text-[var(--brand-600)]">align_app_backup_pre_update</code>) to guarantee instant restore capability even in edge cases.
+              </p>
+            </div>
+
+            {restoreStatus && (
+              <div
+                className={`p-3 rounded text-xs border ${
+                  restoreStatus.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                }`}
+              >
+                {restoreStatus.text}
+              </div>
+            )}
+
+            {/* Actions: Export & Restore */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div className="rounded border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-[var(--text)]">
+                  <Download className="h-4 w-4 text-[var(--brand-600)]" />
+                  <span>Export Database Backup</span>
+                </div>
+                <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
+                  Download a full offline JSON ledger backup including all work items, tasks, follow-ups, meetings, and users.
+                </p>
+                <button
+                  type="button"
+                  onClick={exportDatabaseBackup}
+                  className="flex items-center gap-1.5 rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] text-white text-xs font-semibold px-3 py-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download Backup (.json)</span>
+                </button>
+              </div>
+
+              <div className="rounded border border-[var(--border)] bg-[var(--surface-2)] p-4 space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-[var(--text)]">
+                  <Upload className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>Restore Database from File</span>
+                </div>
+                <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
+                  Restore your entire application state from a previously exported Align JSON snapshot.
+                </p>
+                <div>
+                  <input
+                    type="file"
+                    ref={restoreFileInputRef}
+                    accept=".json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const content = event.target?.result as string;
+                        if (!content) return;
+                        const res = restoreDatabaseBackup(content);
+                        if (res.success) {
+                          setRestoreStatus({
+                            text: 'Database successfully restored from backup snapshot. All records restored.',
+                            type: 'success',
+                          });
+                        } else {
+                          setRestoreStatus({
+                            text: res.error || 'Failed to restore database from backup file.',
+                            type: 'error',
+                          });
+                        }
+                      };
+                      reader.readAsText(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => restoreFileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-3)] text-[var(--text)] text-xs font-semibold px-3 py-1.5 shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Upload className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <span>Select Backup File to Restore</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1315,14 +1631,14 @@ export const SettingsView: React.FC = () => {
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-[var(--text-2)]">Initial Password</label>
-                <span className="text-[10px] text-[var(--text-3)] font-mono">Default: align@2026</span>
+                <label className="text-xs font-semibold text-[var(--text-2)]">Temporary Password (Optional)</label>
+                <span className="text-[10px] text-[var(--text-3)]">User must change on first login</span>
               </div>
               <input
-                type="text"
+                type="password"
                 value={newUserPassword}
                 onChange={(e) => setNewUserPassword(e.target.value)}
-                placeholder="align@2026"
+                placeholder="Leave blank for secure auto-generated temporary key"
                 className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] font-mono"
               />
             </div>

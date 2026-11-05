@@ -15,6 +15,9 @@ export interface AppUser {
   avatar?: string;
   createdAt?: string;
   password?: string;
+  passwordHash?: string;
+  salt?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface SecuritySettings {

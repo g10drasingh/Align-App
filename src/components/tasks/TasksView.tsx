@@ -62,8 +62,7 @@ export const TasksView: React.FC = () => {
     archiveWorkItem,
     canEdit,
     isCeoViewer,
-    setIsNewItemOpen,
-    setNewItemDefaultType,
+    openCreateModal,
     followups,
   } = useApp();
 
@@ -304,8 +303,11 @@ export const TasksView: React.FC = () => {
           {canEdit && (
             <button
               onClick={() => {
-                setNewItemDefaultType('task');
-                setIsNewItemOpen(true);
+                openCreateModal({
+                  type: 'task',
+                  mode: 'task',
+                  parentId: null,
+                });
               }}
               className="flex items-center gap-1.5 rounded-md bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors cursor-pointer"
             >

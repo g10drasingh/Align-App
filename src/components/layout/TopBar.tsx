@@ -24,6 +24,8 @@ import {
   Users,
   Lock,
   LogOut,
+  Sparkles,
+  KeyRound,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -49,6 +51,9 @@ export const TopBar: React.FC = () => {
     isEA,
     isCeoViewer,
     isViewer,
+    updateInfo,
+    checkUpdates,
+    setIsChangePasswordRequired,
   } = useApp();
 
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
@@ -279,6 +284,25 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
+        {/* Software Update Quick Action */}
+        <button
+          onClick={() => checkUpdates(true)}
+          className="relative flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] transition-colors cursor-pointer"
+          title={
+            updateInfo?.isAvailable
+              ? `New update v${updateInfo.latestVersion} available! Click to update.`
+              : 'Check for software updates'
+          }
+        >
+          <Sparkles className="h-4 w-4 text-[var(--brand-600)]" />
+          {updateInfo?.isAvailable && (
+            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+          )}
+        </button>
+
         {/* Quick Lock Button */}
         <button
           onClick={lockApp}
@@ -293,7 +317,7 @@ export const TopBar: React.FC = () => {
           <button
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             className="flex items-center gap-1.5 rounded-full p-0.5 hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
-            title={`${currentUser.name} (${currentUser.role.toUpperCase()}) - Click to switch or manage accounts`}
+            title={`${currentUser.name} (${currentUser.role.toUpperCase()}) - Account & security`}
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--brand-600)] text-xs font-semibold text-white shadow-2xs">
               {currentUser.name
@@ -338,13 +362,42 @@ export const TopBar: React.FC = () => {
                 <div className="border-t border-[var(--border)] pt-1 space-y-1">
                   <button
                     onClick={() => {
+                      setIsUserMenuOpen(false);
+                      checkUpdates(true);
+                    }}
+                    className="flex w-full items-center justify-between rounded px-2 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5 text-[var(--brand-600)]" />
+                      <span>Check for Updates</span>
+                    </div>
+                    {updateInfo?.isAvailable && (
+                      <span className="rounded bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 text-[9px] font-bold">
+                        NEW
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsChangePasswordRequired(true);
+                    }}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer"
+                  >
+                    <KeyRound className="h-3.5 w-3.5 text-amber-500" />
+                    <span>Change Password</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
                       setActiveNav('settings');
                       setIsUserMenuOpen(false);
                     }}
                     className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer"
                   >
                     <Users className="h-3.5 w-3.5 text-[var(--brand-600)]" />
-                    <span>Manage Users & Roles</span>
+                    <span>Manage Users & Settings</span>
                   </button>
 
                   <button

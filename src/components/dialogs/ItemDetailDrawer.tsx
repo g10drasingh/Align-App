@@ -16,6 +16,7 @@ import {
   Lock,
   MessageSquare,
   OctagonX,
+  Pencil,
   Plus,
   Repeat,
   Trash2,
@@ -28,6 +29,7 @@ import {
   countLeaves,
   getDeadlineInfo,
 } from '../../utils/engine';
+import { RichTextEditor } from '../common/RichTextEditor';
 
 export const ItemDetailDrawer: React.FC = () => {
   const {
@@ -42,12 +44,15 @@ export const ItemDetailDrawer: React.FC = () => {
     todayStr,
     dueSoonWindow,
     updateWorkItem,
+    deleteWorkItem,
     archiveWorkItem,
     toggleCeoAttention,
     setManualWeight,
     resetWeightToAuto,
     followups,
     createFollowup,
+    updateFollowup,
+    deleteFollowup,
     logFollowupOutcome,
     postponeFollowup,
     cancelFollowup,
@@ -64,21 +69,27 @@ export const ItemDetailDrawer: React.FC = () => {
     priorities,
     categories,
     ceoAttentionStatuses,
-    setIsNewItemOpen,
-    setNewItemDefaultType,
-    setNewItemDefaultParentId,
+    openCreateModal,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'children' | 'followups' | 'links' | 'activity'>('overview');
+
+  // Title inline editing state
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Manual weight editor state
   const [editingWeightChildId, setEditingWeightChildId] = useState<string | null>(null);
   const [editingWeightValue, setEditingWeightValue] = useState<number>(0);
 
-  // Follow-up form
+  // Follow-up form & edit state
   const [newFuDate, setNewFuDate] = useState(todayStr);
   const [newFuRemarks, setNewFuRemarks] = useState('');
   const [isAddingFu, setIsAddingFu] = useState(false);
+  const [editingFuId, setEditingFuId] = useState<string | null>(null);
+  const [editingFuRemarks, setEditingFuRemarks] = useState('');
+  const [editingFuDate, setEditingFuDate] = useState('');
 
   // Link form
   const [newLinkTargetId, setNewLinkTargetId] = useState('');
@@ -88,8 +99,10 @@ export const ItemDetailDrawer: React.FC = () => {
   if (!item) return null;
 
   const isProject = item.itemType === 'project';
-  const subItemsLabel = isProject ? 'Sub-projects' : 'Subtasks';
-  const subItemSingular = isProject ? 'Sub-project' : 'Subtask';
+  const isSubProject = isProject && Boolean(item.parentId);
+  const isSubTask = !isProject && Boolean(item.parentId);
+  const subItemsLabel = isProject ? 'Sub-projects & Tasks' : 'Subtasks';
+  const subItemSingular = isProject ? 'Sub-project / Task' : 'Subtask';
 
   const status = statusMap.get(item.statusId);
   const priority = priorityMap.get(item.priorityId);
@@ -105,9 +118,6 @@ export const ItemDetailDrawer: React.FC = () => {
     priorityMap
   );
   const children = workItems.filter((w) => w.parentId === item.id && !w.isArchived);
-
-  // Calculate sum of child weights to warn if manual weights != 100
-  const totalChildWeights = Object.values(childWeights).reduce((acc, c) => acc + c.weight, 0);
 
   // Follow-ups for this item
   const itemFollowups = followups
@@ -138,84 +148,148 @@ export const ItemDetailDrawer: React.FC = () => {
         <div className="w-screen max-w-2xl bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--surface-2)]">
-            <div className="flex items-center gap-2 overflow-hidden pr-4">
+            <div className="flex items-center gap-2 overflow-hidden pr-4 flex-1 min-w-0">
               {item.needsCeoAttention && (
                 <Flag className="h-4 w-4 text-[var(--attention-fg)] fill-[var(--attention-fg)] shrink-0" />
               )}
               <span className="rounded bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--text-2)] uppercase shrink-0">
-                {item.itemType}
+                {isSubProject ? 'Sub-project' : isSubTask ? 'Subtask' : item.itemType}
               </span>
-              <h2 className="text-sm font-bold text-[var(--text)] truncate">
-                {item.name}
-              </h2>
-            </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {canEdit && (
-                <div className="flex items-center gap-1.5 mr-1">
-                  {isProject ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          setNewItemDefaultType('project');
-                          setNewItemDefaultParentId(item.id);
-                          setIsNewItemOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 rounded bg-[var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
-                        title="Add a sub-project under this project"
-                      >
-                        <Plus className="h-3 w-3 text-[var(--brand-600)]" />
-                        <span>Sub-project</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setNewItemDefaultType('task');
-                          setNewItemDefaultParentId(item.id);
-                          setIsNewItemOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
-                        title="Add a task under this project"
-                      >
-                        <Plus className="h-3 w-3" />
-                        <span>Task</span>
-                      </button>
-                    </>
-                  ) : (
+              {isEditingTitle ? (
+                <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editingTitleValue}
+                    onChange={(e) => setEditingTitleValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && editingTitleValue.trim()) {
+                        updateWorkItem(item.id, { name: editingTitleValue.trim() });
+                        setIsEditingTitle(false);
+                      } else if (e.key === 'Escape') {
+                        setIsEditingTitle(false);
+                      }
+                    }}
+                    className="flex-1 rounded border border-[var(--brand-600)] bg-[var(--surface)] px-2.5 py-1 text-xs font-bold text-[var(--text)] focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (editingTitleValue.trim()) {
+                        updateWorkItem(item.id, { name: editingTitleValue.trim() });
+                        setIsEditingTitle(false);
+                      }
+                    }}
+                    className="p-1 rounded bg-[var(--brand-600)] text-white hover:bg-[var(--brand-700)] cursor-pointer"
+                    title="Save name"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsEditingTitle(false)}
+                    className="p-1 rounded hover:bg-[var(--surface-3)] text-[var(--text-3)] cursor-pointer"
+                    title="Cancel"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 min-w-0 group">
+                  <h2
+                    className="text-sm font-bold text-[var(--text)] truncate cursor-pointer hover:underline"
+                    onClick={() => {
+                      if (canEdit) {
+                        setIsEditingTitle(true);
+                        setEditingTitleValue(item.name);
+                      }
+                    }}
+                    title="Click to rename"
+                  >
+                    {item.name}
+                  </h2>
+                  {canEdit && (
                     <button
                       onClick={() => {
-                        setNewItemDefaultType('task');
-                        setNewItemDefaultParentId(item.id);
-                        setIsNewItemOpen(true);
+                        setIsEditingTitle(true);
+                        setEditingTitleValue(item.name);
                       }}
-                      className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
-                      title="Add a subtask under this task"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-3)] hover:text-[var(--text)] rounded transition-opacity cursor-pointer"
+                      title="Rename item"
                     >
-                      <Plus className="h-3 w-3" />
-                      <span>Subtask</span>
+                      <Pencil className="h-3 w-3" />
                     </button>
                   )}
                 </div>
               )}
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
               {canEdit && (
-                <button
-                  onClick={() => {
-                    archiveWorkItem(item.id);
-                    setSelectedItemId(null);
-                  }}
-                  className="p-1 rounded text-[var(--text-3)] hover:text-[var(--danger-fg)] hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer"
-                  title="Archive item"
-                >
-                  <Archive className="h-4 w-4" />
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      archiveWorkItem(item.id);
+                      setSelectedItemId(null);
+                    }}
+                    className="p-1.5 rounded text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--surface-3)] cursor-pointer transition-colors"
+                    title="Archive item"
+                  >
+                    <Archive className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-1.5 rounded text-[var(--text-3)] hover:text-[var(--danger-fg)] hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer transition-colors"
+                    title="Delete item permanently"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </>
               )}
               <button
                 onClick={() => setSelectedItemId(null)}
-                className="p-1 rounded text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--surface-3)] cursor-pointer"
+                className="p-1.5 rounded text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--surface-3)] cursor-pointer transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
           </div>
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
+                    <Trash2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[var(--text)]">Delete {item.itemType}?</h3>
+                    <p className="text-xs text-[var(--text-3)] mt-1">
+                      Are you sure you want to permanently delete <strong>"{item.name}"</strong>? Any sub-items under this will also be deleted.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="px-3 py-1.5 text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      deleteWorkItem(item.id);
+                      setShowDeleteConfirm(false);
+                      setSelectedItemId(null);
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-2xs"
+                  >
+                    Delete Permanently
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Subheader Tabs */}
           <div className="flex border-b border-[var(--border)] px-6 text-xs bg-[var(--surface)]">
@@ -277,22 +351,14 @@ export const ItemDetailDrawer: React.FC = () => {
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 {/* Description */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-[var(--text)]">Description</label>
-                  {canEdit ? (
-                    <textarea
-                      rows={3}
-                      value={item.description || ''}
-                      onChange={(e) => updateWorkItem(item.id, { description: e.target.value })}
-                      placeholder="Add strategic context or objectives..."
-                      className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] p-2.5 text-xs text-[var(--text)] focus:border-[var(--brand-600)] focus:outline-none"
-                    />
-                  ) : (
-                    <p className="text-xs text-[var(--text-2)] bg-[var(--surface-2)] p-2.5 rounded">
-                      {item.description || 'No description provided.'}
-                    </p>
-                  )}
-                </div>
+                <RichTextEditor
+                  label="Description & Strategic Notes (Markdown)"
+                  value={item.description || ''}
+                  onChange={(val) => updateWorkItem(item.id, { description: val })}
+                  placeholder="Add strategic context, deliverables checklist, or acceptance criteria..."
+                  minHeight="140px"
+                  disabled={!canEdit}
+                />
 
                 {/* CEO Attention Alert & Note */}
                 <div className="rounded-md border border-[var(--attention-border)] bg-[var(--attention-bg)] p-4 space-y-2">
@@ -499,9 +565,11 @@ export const ItemDetailDrawer: React.FC = () => {
                         <>
                           <button
                             onClick={() => {
-                              setNewItemDefaultType('project');
-                              setNewItemDefaultParentId(item.id);
-                              setIsNewItemOpen(true);
+                              openCreateModal({
+                                type: 'project',
+                                mode: 'sub_project',
+                                parentId: item.id,
+                              });
                             }}
                             className="inline-flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
                           >
@@ -510,9 +578,11 @@ export const ItemDetailDrawer: React.FC = () => {
                           </button>
                           <button
                             onClick={() => {
-                              setNewItemDefaultType('task');
-                              setNewItemDefaultParentId(item.id);
-                              setIsNewItemOpen(true);
+                              openCreateModal({
+                                type: 'task',
+                                mode: 'task',
+                                parentId: item.id,
+                              });
                             }}
                             className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
                           >
@@ -523,9 +593,11 @@ export const ItemDetailDrawer: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => {
-                            setNewItemDefaultType('task');
-                            setNewItemDefaultParentId(item.id);
-                            setIsNewItemOpen(true);
+                            openCreateModal({
+                              type: 'task',
+                              mode: 'sub_task',
+                              parentId: item.id,
+                            });
                           }}
                           className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs transition-colors cursor-pointer"
                         >
@@ -539,16 +611,18 @@ export const ItemDetailDrawer: React.FC = () => {
 
                 {children.length === 0 ? (
                   <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-xs text-[var(--text-3)] flex flex-col items-center justify-center gap-3">
-                    <p>No {subItemsLabel.toLowerCase()} created under this {isProject ? 'project' : 'task'} yet.</p>
+                    <p>No {subItemsLabel.toLowerCase()} created under this {isProject ? (isSubProject ? 'sub-project' : 'project') : 'task'} yet.</p>
                     {canEdit && (
                       <div className="flex items-center gap-2 pt-1">
                         {isProject ? (
                           <>
                             <button
                               onClick={() => {
-                                setNewItemDefaultType('project');
-                                setNewItemDefaultParentId(item.id);
-                                setIsNewItemOpen(true);
+                                openCreateModal({
+                                  type: 'project',
+                                  mode: 'sub_project',
+                                  parentId: item.id,
+                                });
                               }}
                               className="inline-flex items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-2)] cursor-pointer"
                             >
@@ -557,9 +631,11 @@ export const ItemDetailDrawer: React.FC = () => {
                             </button>
                             <button
                               onClick={() => {
-                                setNewItemDefaultType('task');
-                                setNewItemDefaultParentId(item.id);
-                                setIsNewItemOpen(true);
+                                openCreateModal({
+                                  type: 'task',
+                                  mode: 'task',
+                                  parentId: item.id,
+                                });
                               }}
                               className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs cursor-pointer"
                             >
@@ -570,9 +646,11 @@ export const ItemDetailDrawer: React.FC = () => {
                         ) : (
                           <button
                             onClick={() => {
-                              setNewItemDefaultType('task');
-                              setNewItemDefaultParentId(item.id);
-                              setIsNewItemOpen(true);
+                              openCreateModal({
+                                type: 'task',
+                                mode: 'sub_task',
+                                parentId: item.id,
+                              });
                             }}
                             className="inline-flex items-center gap-1 rounded bg-[var(--brand-600)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--brand-700)] shadow-2xs cursor-pointer"
                           >
@@ -685,11 +763,16 @@ export const ItemDetailDrawer: React.FC = () => {
             {activeTab === 'followups' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-[var(--text)]">Check-in Audit Log</h3>
+                  <div>
+                    <h3 className="text-xs font-bold text-[var(--text)]">Check-in Audit Log</h3>
+                    <p className="text-xs text-[var(--text-3)]">
+                      Schedule and track review milestones, log decisions, and record check-in outcomes.
+                    </p>
+                  </div>
                   {canEdit && (
                     <button
                       onClick={() => setIsAddingFu(!isAddingFu)}
-                      className="flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white shadow-2xs"
+                      className="flex items-center gap-1 rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-[var(--brand-700)] cursor-pointer"
                     >
                       <Plus className="h-3 w-3" />
                       <span>Schedule follow-up</span>
@@ -699,26 +782,34 @@ export const ItemDetailDrawer: React.FC = () => {
 
                 {/* Inline form to schedule follow-up */}
                 {isAddingFu && (
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[var(--text)]">New Follow-up Check-in</span>
                       <input
                         type="date"
                         value={newFuDate}
                         onChange={(e) => setNewFuDate(e.target.value)}
-                        className="rounded border border-[var(--border-strong)] bg-[var(--surface)] p-1.5 text-xs"
+                        className="rounded border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--text)]"
                       />
-                      <input
-                        type="text"
-                        placeholder="Agenda / check-in purpose..."
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-[var(--text-3)] mb-1">
+                        Agenda & Purpose (Markdown supported)
+                      </label>
+                      <RichTextEditor
                         value={newFuRemarks}
-                        onChange={(e) => setNewFuRemarks(e.target.value)}
-                        className="rounded border border-[var(--border-strong)] bg-[var(--surface)] p-1.5 text-xs"
+                        onChange={setNewFuRemarks}
+                        placeholder="Agenda, milestones to verify, or check-in purpose..."
+                        minHeight="110px"
                       />
                     </div>
                     <div className="flex justify-end gap-2">
                       <button
-                        onClick={() => setIsAddingFu(false)}
-                        className="text-xs px-2 py-1 text-[var(--text-2)]"
+                        onClick={() => {
+                          setIsAddingFu(false);
+                          setNewFuRemarks('');
+                        }}
+                        className="text-xs px-2.5 py-1 text-[var(--text-2)] hover:bg-[var(--surface-3)] rounded cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -733,9 +824,9 @@ export const ItemDetailDrawer: React.FC = () => {
                           setIsAddingFu(false);
                           setNewFuRemarks('');
                         }}
-                        className="rounded bg-[var(--brand-600)] px-2.5 py-1 text-xs font-semibold text-white"
+                        className="rounded bg-[var(--brand-600)] px-3 py-1 text-xs font-semibold text-white hover:bg-[var(--brand-700)] cursor-pointer shadow-2xs"
                       >
-                        Save
+                        Schedule Follow-up
                       </button>
                     </div>
                   </div>
@@ -751,12 +842,13 @@ export const ItemDetailDrawer: React.FC = () => {
                       const isDone = fu.statusId === 'fstat-done';
                       const isMissed = fu.statusId === 'fstat-missed';
                       const isPostponed = fu.statusId === 'fstat-postponed';
+                      const isEditingThis = editingFuId === fu.id;
 
                       return (
                         <div key={fu.id} className="relative group">
                           {/* Dot marker on timeline rail */}
                           <div
-                            className={`absolute -left-[23px] top-1 h-3 w-3 rounded-full border-2 border-[var(--surface)] ${
+                            className={`absolute -left-[23px] top-1.5 h-3 w-3 rounded-full border-2 border-[var(--surface)] ${
                               isDone
                                 ? 'bg-emerald-600'
                                 : isMissed
@@ -767,27 +859,120 @@ export const ItemDetailDrawer: React.FC = () => {
                             }`}
                           />
 
-                          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 space-y-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-bold text-[var(--text)] tabular-nums">
-                                {fu.followupDate}
-                              </span>
-                              <span
-                                className={`text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded ${
-                                  isDone
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : isMissed
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-[var(--surface-3)] text-[var(--text-2)]'
-                                }`}
-                              >
-                                {isDone ? 'Done' : isMissed ? 'Missed' : 'Scheduled'}
-                              </span>
-                            </div>
+                          <div className="rounded border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2">
+                            {isEditingThis ? (
+                              <div className="space-y-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-bold text-[var(--text)]">Edit Follow-up</span>
+                                  <input
+                                    type="date"
+                                    value={editingFuDate}
+                                    onChange={(e) => setEditingFuDate(e.target.value)}
+                                    className="rounded border border-[var(--border-strong)] bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text)]"
+                                  />
+                                </div>
+                                <RichTextEditor
+                                  value={editingFuRemarks}
+                                  onChange={setEditingFuRemarks}
+                                  placeholder="Follow-up remarks / outcome..."
+                                  minHeight="100px"
+                                />
+                                <div className="flex justify-end gap-2 pt-1">
+                                  <button
+                                    onClick={() => setEditingFuId(null)}
+                                    className="px-2.5 py-1 text-xs text-[var(--text-2)] hover:bg-[var(--surface-2)] rounded cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      updateFollowup(fu.id, {
+                                        followupDate: editingFuDate,
+                                        remarks: editingFuRemarks.trim() || undefined,
+                                      });
+                                      setEditingFuId(null);
+                                    }}
+                                    className="px-3 py-1 text-xs font-semibold text-white bg-[var(--brand-600)] hover:bg-[var(--brand-700)] rounded cursor-pointer shadow-2xs"
+                                  >
+                                    Save Changes
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-bold text-[var(--text)] tabular-nums">
+                                    {fu.followupDate}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`text-[10px] font-semibold uppercase px-1.5 py-0.2 rounded ${
+                                        isDone
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                          : isMissed
+                                          ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                                          : isPostponed
+                                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                          : 'bg-[var(--surface-3)] text-[var(--text-2)]'
+                                      }`}
+                                    >
+                                      {isDone ? 'Done' : isMissed ? 'Missed' : isPostponed ? 'Postponed' : 'Scheduled'}
+                                    </span>
+                                    {canEdit && (
+                                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                          onClick={() => {
+                                            setEditingFuId(fu.id);
+                                            setEditingFuDate(fu.followupDate);
+                                            setEditingFuRemarks(fu.remarks || '');
+                                          }}
+                                          className="p-1 text-[var(--text-3)] hover:text-[var(--text)] rounded cursor-pointer"
+                                          title="Edit remarks or date"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          onClick={() => deleteFollowup(fu.id)}
+                                          className="p-1 text-[var(--text-3)] hover:text-[var(--danger-fg)] rounded cursor-pointer"
+                                          title="Delete follow-up"
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
 
-                            <p className="text-xs text-[var(--text-2)] whitespace-pre-line">
-                              {fu.remarks || '(no outcome recorded)'}
-                            </p>
+                                <p className="text-xs text-[var(--text-2)] whitespace-pre-line leading-relaxed">
+                                  {fu.remarks || <span className="italic text-[var(--text-3)]">No remarks recorded</span>}
+                                </p>
+
+                                {canEdit && !isDone && (
+                                  <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)] text-[11px]">
+                                    <button
+                                      onClick={() => logFollowupOutcome(fu.id, 'Completed review')}
+                                      className="text-emerald-700 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
+                                    >
+                                      Mark Completed
+                                    </button>
+                                    <span className="text-[var(--text-3)]">•</span>
+                                    <button
+                                      onClick={() => postponeFollowup(fu.id, todayStr)}
+                                      className="text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                                    >
+                                      Postpone
+                                    </button>
+                                    <span className="text-[var(--text-3)]">•</span>
+                                    <button
+                                      onClick={() => cancelFollowup(fu.id)}
+                                      className="text-[var(--text-3)] hover:text-[var(--danger-fg)] cursor-pointer"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                       );

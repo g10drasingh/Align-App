@@ -5,19 +5,22 @@
 
 import React, { useState } from 'react';
 import {
+  AlertCircle,
+  Ban,
   Calendar,
+  CalendarClock,
   CheckCircle2,
   Clock,
-  MessageSquare,
-  Plus,
-  AlertCircle,
-  CalendarClock,
-  RotateCcw,
-  Ban,
   FileText,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Followup } from '../../types';
+import { RichTextEditor } from '../common/RichTextEditor';
 
 export const FollowupsView: React.FC = () => {
   const {
@@ -30,6 +33,8 @@ export const FollowupsView: React.FC = () => {
     postponeFollowup,
     cancelFollowup,
     createFollowup,
+    updateFollowup,
+    deleteFollowup,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'scheduled' | 'missed' | 'done' | 'all'>('scheduled');
@@ -42,6 +47,15 @@ export const FollowupsView: React.FC = () => {
   const [selectedFuForPostpone, setSelectedFuForPostpone] = useState<Followup | null>(null);
   const [newPostponeDate, setNewPostponeDate] = useState('');
 
+  // Edit follow-up modal
+  const [selectedFuForEdit, setSelectedFuForEdit] = useState<Followup | null>(null);
+  const [editFuDate, setEditFuDate] = useState('');
+  const [editFuRemarks, setEditFuRemarks] = useState('');
+
+  // Delete follow-up confirmation
+  const [fuToDelete, setFuToDelete] = useState<Followup | null>(null);
+
+  // Schedule new modal
   const [isScheduleNewOpen, setIsScheduleNewOpen] = useState(false);
   const [newFuItemId, setNewFuItemId] = useState('');
   const [newFuDate, setNewFuDate] = useState(todayStr);
@@ -49,12 +63,14 @@ export const FollowupsView: React.FC = () => {
 
   const missedCount = followups.filter((f) => f.statusId === 'fstat-missed').length;
 
-  const filteredFollowups = followups.filter((f) => {
-    if (activeTab === 'scheduled') return f.statusId === 'fstat-scheduled';
-    if (activeTab === 'missed') return f.statusId === 'fstat-missed';
-    if (activeTab === 'done') return f.statusId === 'fstat-done';
-    return true;
-  }).sort((a, b) => b.followupDate.localeCompare(a.followupDate));
+  const filteredFollowups = followups
+    .filter((f) => {
+      if (activeTab === 'scheduled') return f.statusId === 'fstat-scheduled';
+      if (activeTab === 'missed') return f.statusId === 'fstat-missed';
+      if (activeTab === 'done') return f.statusId === 'fstat-done';
+      return true;
+    })
+    .sort((a, b) => b.followupDate.localeCompare(a.followupDate));
 
   return (
     <div className="space-y-4 pb-16 select-none">
@@ -160,7 +176,7 @@ export const FollowupsView: React.FC = () => {
             return (
               <div
                 key={fu.id}
-                className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[var(--surface-2)] transition-colors ${
+                className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[var(--surface-2)] transition-colors group ${
                   isMissed ? 'bg-red-50/40 dark:bg-red-950/20' : ''
                 }`}
               >
@@ -176,7 +192,7 @@ export const FollowupsView: React.FC = () => {
                           : isDone
                           ? 'bg-[var(--success-bg)] text-[var(--success-fg)] border-emerald-300 dark:border-emerald-900'
                           : isPostponed
-                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300'
                           : isCancelled
                           ? 'bg-[var(--surface-3)] text-[var(--text-3)] border-[var(--border)]'
                           : 'bg-[var(--brand-subtle)] text-[var(--brand-600)] border-[var(--brand-border)]'
@@ -189,8 +205,8 @@ export const FollowupsView: React.FC = () => {
                     </span>
                   </div>
 
-                  <p className="text-xs text-[var(--text-2)] mt-1.5">
-                    {fu.remarks || '(no outcome remarks logged)'}
+                  <p className="text-xs text-[var(--text-2)] mt-1.5 whitespace-pre-line leading-relaxed">
+                    {fu.remarks || <span className="italic text-[var(--text-3)]">(no outcome remarks logged)</span>}
                   </p>
 
                   {fu.outcomeLoggedAt && (
@@ -200,64 +216,175 @@ export const FollowupsView: React.FC = () => {
                   )}
                 </div>
 
-                {/* Quick actions for EA/Admin */}
-                {canEdit && (isScheduled || isMissed) && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => {
-                        setSelectedFuForOutcome(fu);
-                        setOutcomeText(fu.remarks || '');
-                        setNextFollowupDate('');
-                      }}
-                      className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-2.5 py-1 text-xs font-semibold text-white shadow-2xs transition-colors cursor-pointer"
-                    >
-                      Log outcome
-                    </button>
-                    {isScheduled && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedFuForPostpone(fu);
-                            setNewPostponeDate('');
-                          }}
-                          className="rounded border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--text-2)] transition-colors cursor-pointer"
-                        >
-                          Postpone
-                        </button>
-                        <button
-                          onClick={() => cancelFollowup(fu.id)}
-                          className="rounded border border-[var(--border)] hover:bg-red-50 dark:hover:bg-red-950/40 px-2 py-1 text-xs text-[var(--text-3)] hover:text-[var(--danger-fg)] transition-colors cursor-pointer"
-                          title="Cancel follow-up"
-                        >
-                          <Ban className="h-3 w-3" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
+                {/* Actions: Edit, Delete, Log Outcome, Postpone, Cancel */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {canEdit && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setSelectedFuForEdit(fu);
+                          setEditFuDate(fu.followupDate);
+                          setEditFuRemarks(fu.remarks || '');
+                        }}
+                        className="p-1.5 rounded text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--surface-3)] transition-colors cursor-pointer"
+                        title="Edit follow-up remarks & date"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+
+                      <button
+                        onClick={() => setFuToDelete(fu)}
+                        className="p-1.5 rounded text-[var(--text-3)] hover:text-[var(--danger-fg)] hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                        title="Delete follow-up"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+
+                  {canEdit && (isScheduled || isMissed) && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setSelectedFuForOutcome(fu);
+                          setOutcomeText(fu.remarks || '');
+                          setNextFollowupDate('');
+                        }}
+                        className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-2.5 py-1 text-xs font-semibold text-white shadow-2xs transition-colors cursor-pointer"
+                      >
+                        Log outcome
+                      </button>
+                      {isScheduled && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedFuForPostpone(fu);
+                              setNewPostponeDate('');
+                            }}
+                            className="rounded border border-[var(--border-strong)] bg-[var(--surface)] hover:bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--text-2)] transition-colors cursor-pointer"
+                          >
+                            Postpone
+                          </button>
+                          <button
+                            onClick={() => cancelFollowup(fu.id)}
+                            className="rounded border border-[var(--border)] hover:bg-red-50 dark:hover:bg-red-950/40 px-2 py-1 text-xs text-[var(--text-3)] hover:text-[var(--danger-fg)] transition-colors cursor-pointer"
+                            title="Cancel follow-up"
+                          >
+                            <Ban className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             );
           })
         )}
       </div>
 
+      {/* Edit Follow-up Modal */}
+      {selectedFuForEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl space-y-4">
+            <h2 className="text-sm font-bold text-[var(--text)]">Edit Follow-up Check-in</h2>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-[var(--text-2)]">Follow-up Date</label>
+              <input
+                type="date"
+                value={editFuDate}
+                onChange={(e) => setEditFuDate(e.target.value)}
+                className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-[var(--text-2)]">
+                Remarks / Purpose (Markdown supported)
+              </label>
+              <RichTextEditor
+                value={editFuRemarks}
+                onChange={setEditFuRemarks}
+                placeholder="Follow-up remarks, agenda, or discussion notes..."
+                minHeight="120px"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <button
+                onClick={() => setSelectedFuForEdit(null)}
+                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  updateFollowup(selectedFuForEdit.id, {
+                    followupDate: editFuDate,
+                    remarks: editFuRemarks.trim() || undefined,
+                  });
+                  setSelectedFuForEdit(null);
+                }}
+                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white shadow-2xs cursor-pointer"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Follow-up Confirmation Modal */}
+      {fuToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text)]">Delete Follow-up?</h3>
+                <p className="text-xs text-[var(--text-3)] mt-1">
+                  Are you sure you want to permanently delete the follow-up scheduled for <strong>{fuToDelete.followupDate}</strong>?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <button
+                onClick={() => setFuToDelete(null)}
+                className="px-3 py-1.5 text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] rounded cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  deleteFollowup(fuToDelete.id);
+                  setFuToDelete(null);
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded shadow-2xs cursor-pointer"
+              >
+                Delete Permanently
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Log Outcome Modal */}
       {selectedFuForOutcome && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl space-y-4">
+          <div className="w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl space-y-4">
             <h2 className="text-sm font-bold text-[var(--text)]">Log Follow-up Outcome</h2>
             <p className="text-xs text-[var(--text-2)]">
               Record the outcome, confirmations, or blockers discovered during this check-in.
             </p>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-2)]">Remarks / Outcome</label>
-              <textarea
-                autoFocus
-                rows={4}
+              <label className="text-xs font-semibold text-[var(--text-2)]">
+                Remarks / Outcome (Markdown supported)
+              </label>
+              <RichTextEditor
                 value={outcomeText}
-                onChange={(e) => setOutcomeText(e.target.value)}
+                onChange={setOutcomeText}
                 placeholder="e.g. Engineering confirmed API credentials will be provisioned by Tuesday..."
-                className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] p-2 text-xs text-[var(--text)] focus:border-[var(--brand-600)] focus:outline-none"
+                minHeight="120px"
               />
             </div>
             <div className="space-y-1">
@@ -271,10 +398,10 @@ export const FollowupsView: React.FC = () => {
                 className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--brand-600)] focus:outline-none"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
               <button
                 onClick={() => setSelectedFuForOutcome(null)}
-                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] cursor-pointer"
               >
                 Cancel
               </button>
@@ -288,7 +415,7 @@ export const FollowupsView: React.FC = () => {
                   );
                   setSelectedFuForOutcome(null);
                 }}
-                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 Save outcome & close
               </button>
@@ -317,7 +444,7 @@ export const FollowupsView: React.FC = () => {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setSelectedFuForPostpone(null)}
-                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] cursor-pointer"
               >
                 Cancel
               </button>
@@ -327,7 +454,7 @@ export const FollowupsView: React.FC = () => {
                   postponeFollowup(selectedFuForPostpone.id, newPostponeDate);
                   setSelectedFuForPostpone(null);
                 }}
-                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 Confirm postponement
               </button>
@@ -339,7 +466,7 @@ export const FollowupsView: React.FC = () => {
       {/* Schedule New Follow-up Modal */}
       {isScheduleNewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl space-y-4">
+          <div className="w-full max-w-lg rounded-lg border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl space-y-4">
             <h2 className="text-sm font-bold text-[var(--text)]">Schedule Follow-up</h2>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-[var(--text-2)]">Target Item</label>
@@ -352,7 +479,7 @@ export const FollowupsView: React.FC = () => {
                   .filter((w) => !w.isArchived)
                   .map((w) => (
                     <option key={w.id} value={w.id}>
-                      [{w.itemType.toUpperCase()}] {w.name}
+                      [{w.itemType === 'project' ? (w.parentId ? 'SUB-PROJECT' : 'PROJECT') : (w.parentId ? 'SUBTASK' : 'TASK')}] {w.name}
                     </option>
                   ))}
               </select>
@@ -367,19 +494,20 @@ export const FollowupsView: React.FC = () => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-[var(--text-2)]">Agenda / Objective</label>
-              <textarea
-                rows={3}
+              <label className="text-xs font-semibold text-[var(--text-2)]">
+                Agenda / Objective (Markdown supported)
+              </label>
+              <RichTextEditor
                 value={newFuRemarks}
-                onChange={(e) => setNewFuRemarks(e.target.value)}
+                onChange={setNewFuRemarks}
                 placeholder="What will you check in on?"
-                className="w-full rounded border border-[var(--border-strong)] bg-[var(--surface)] p-2 text-xs text-[var(--text)]"
+                minHeight="110px"
               />
             </div>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
               <button
                 onClick={() => setIsScheduleNewOpen(false)}
-                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+                className="rounded px-3 py-1.5 text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-2)] cursor-pointer"
               >
                 Cancel
               </button>
@@ -394,7 +522,7 @@ export const FollowupsView: React.FC = () => {
                   });
                   setIsScheduleNewOpen(false);
                 }}
-                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                className="rounded bg-[var(--brand-600)] hover:bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 Schedule
               </button>

@@ -8,6 +8,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { useAutoLock } from './hooks/useAutoLock';
 import { LoginView } from './components/auth/LoginView';
 import { LockScreenView } from './components/auth/LockScreenView';
+import { ChangePasswordModal } from './components/auth/ChangePasswordModal';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -21,10 +22,23 @@ import { ItemDetailDrawer } from './components/dialogs/ItemDetailDrawer';
 import { NewItemModal } from './components/dialogs/NewItemModal';
 import { ParentCascadeDialog } from './components/dialogs/ParentCascadeDialog';
 import { CommandPalette } from './components/dialogs/CommandPalette';
+import { UpdateModal } from './components/dialogs/UpdateModal';
 import { ToastContainer } from './components/common/ToastContainer';
 
 const MainLayout: React.FC = () => {
-  const { activeNav, isSidebarCollapsed, isAuthenticated, isAppLocked } = useApp();
+  const {
+    activeNav,
+    isSidebarCollapsed,
+    isAuthenticated,
+    isAppLocked,
+    isUpdateModalOpen,
+    setIsUpdateModalOpen,
+    updateInfo,
+    checkUpdates,
+    isCheckingUpdates,
+    isChangePasswordRequired,
+    setIsChangePasswordRequired,
+  } = useApp();
 
   // Attach auto-lock listeners (inactivity countdown + tab visibility/blur)
   useAutoLock();
@@ -70,6 +84,21 @@ const MainLayout: React.FC = () => {
       <ParentCascadeDialog />
       <CommandPalette />
       <ToastContainer />
+
+      {/* Software Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        updateInfo={updateInfo}
+        onCheckAgain={() => checkUpdates(true)}
+        isChecking={isCheckingUpdates}
+      />
+
+      {/* Mandatory Password Change Modal (blocks unauthorized actions until default 'admin' password is changed) */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordRequired}
+        onSuccess={() => setIsChangePasswordRequired(false)}
+      />
 
       {/* 6-Digit PIN App Lock Veil Overlay */}
       {isAppLocked && <LockScreenView />}

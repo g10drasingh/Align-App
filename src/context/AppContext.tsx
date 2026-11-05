@@ -51,6 +51,22 @@ import {
   computeItemProgressAndWeights,
   getDeadlineInfo,
 } from '../utils/engine';
+import {
+  encryptData,
+  decryptData,
+  hashPassword,
+  verifyPassword,
+  generateSalt,
+} from '../utils/crypto';
+import {
+  checkForAppUpdates,
+  loadUpdateSettings,
+  saveUpdateSettings,
+  shouldCheckForUpdate,
+  createPreUpdateBackup,
+  UpdateInfo,
+  CURRENT_APP_VERSION,
+} from '../services/updateService';
 
 export interface ToastInfo {
   id: string;
@@ -77,7 +93,7 @@ interface AppContextType {
   isEA: boolean;
   isCeoViewer: boolean;
   isViewer: boolean;
-  addUser: (user: Omit<AppUser, 'id' | 'createdAt'>) => { success: boolean; error?: string };
+  addUser: (user: Omit<AppUser, 'id' | 'createdAt'>) => Promise<{ success: boolean; error?: string }>;
   updateUser: (id: string, updates: Partial<AppUser>) => void;
   toggleUserStatus: (id: string) => void;
   deleteUser: (id: string) => { success: boolean; error?: string };
@@ -85,7 +101,7 @@ interface AppContextType {
 
   // Auth & Security state
   isAuthenticated: boolean;
-  login: (email: string, password: string) => { success: boolean; error?: string };
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAppLocked: boolean;
   lockApp: () => void;
@@ -98,7 +114,18 @@ interface AppContextType {
   setAutoLockMinutes: (m: number) => void;
   lockOnTabBlur: boolean;
   setLockOnTabBlur: (b: boolean) => void;
-  changeUserPassword: (userId: string, oldPass: string, newPass: string) => { success: boolean; error?: string };
+  changeUserPassword: (userId: string, oldPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
+  isChangePasswordRequired: boolean;
+  setIsChangePasswordRequired: (req: boolean) => void;
+
+  // In-App Updates & Encrypted Vault
+  isUpdateModalOpen: boolean;
+  setIsUpdateModalOpen: (open: boolean) => void;
+  updateInfo: UpdateInfo | null;
+  isCheckingUpdates: boolean;
+  checkUpdates: (isManual?: boolean) => Promise<UpdateInfo>;
+  exportDatabaseBackup: () => void;
+  restoreDatabaseBackup: (jsonStr: string) => { success: boolean; error?: string };
 
   // View state
   activeNav: string; // 'dashboard' | 'tasks' | 'projects' | 'ceo' | 'followups' | 'meetings' | 'settings'
@@ -146,6 +173,7 @@ interface AppContextType {
   // Actions
   createWorkItem: (item: Omit<WorkItem, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy' | 'isArchived'>) => WorkItem;
   updateWorkItem: (id: string, updates: Partial<WorkItem>, reason?: string) => void;
+  deleteWorkItem: (id: string) => void;
   inlineUpdateWorkItem: (id: string, field: keyof WorkItem, value: any, reason?: string) => void;
   archiveWorkItem: (id: string) => void;
   restoreWorkItem: (id: string) => void;
@@ -156,6 +184,7 @@ interface AppContextType {
   // Followups
   createFollowup: (fu: Omit<Followup, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => void;
   updateFollowup: (id: string, updates: Partial<Followup>) => void;
+  deleteFollowup: (id: string) => void;
   logFollowupOutcome: (id: string, outcomeRemarks: string, nextFollowupDate?: string) => void;
   postponeFollowup: (id: string, newDate: string) => void;
   cancelFollowup: (id: string) => void;
@@ -163,6 +192,8 @@ interface AppContextType {
   // Meetings
   createMeeting: (m: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'isArchived'>, actionItemTitle?: string) => Meeting;
   updateMeeting: (id: string, updates: Partial<Meeting>) => void;
+  deleteMeeting: (id: string) => void;
+  createMeetingDeliverable: (meetingId: string, title: string, dueDate?: string) => WorkItem;
 
   // Links
   addLink: (sourceType: 'work_item' | 'meeting', sourceId: string, targetType: 'work_item' | 'meeting', targetId: string) => { success: boolean; error?: string };
@@ -198,6 +229,13 @@ interface AppContextType {
   setNewItemDefaultType: (type: 'project' | 'task') => void;
   newItemDefaultParentId?: string | null;
   setNewItemDefaultParentId: (id: string | null) => void;
+  newItemMode: 'project' | 'sub_project' | 'task' | 'sub_task' | 'generic';
+  setNewItemMode: (mode: 'project' | 'sub_project' | 'task' | 'sub_task' | 'generic') => void;
+  openCreateModal: (options?: {
+    type?: 'project' | 'task';
+    parentId?: string | null;
+    mode?: 'project' | 'sub_project' | 'task' | 'sub_task' | 'generic';
+  }) => void;
 
   // Command palette
   isCommandPaletteOpen: boolean;
@@ -241,20 +279,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<AppUser[]>(() => {
     const saved = loadStorage<AppUser[]>('users', initialUsers);
     if (Array.isArray(saved) && saved.length > 0) {
-      // If user list still has old default with u-ceo, normalize to the 2 initial users
-      const hasOldCeo = saved.some((u) => u.id === 'u-ceo');
-      if (hasOldCeo && saved.length === 3) {
+      // If user list still has old mock accounts without u-admin or has u-ea, normalize to single admin
+      const hasAdmin = saved.some((u) => u.email === 'admin@admin.com');
+      if (!hasAdmin) {
         return initialUsers;
       }
       return saved.map((u) => {
-        const updated = { ...u };
-        if (updated.id === 'u-ea' && !updated.departmentId) {
-          updated.departmentId = 'dept-ge';
+        if (u.email === 'admin@admin.com') {
+          return {
+            ...u,
+            passwordHash: u.passwordHash || 'a36d8e7e4107dab47a2a94f97345b89095e7d7d510afe3ba03ce16025e99e3ed',
+            salt: u.salt || 'align_admin_salt_2026',
+            mustChangePassword: u.mustChangePassword !== undefined ? u.mustChangePassword : true,
+          };
         }
-        if (!updated.password) {
-          updated.password = 'align@2026';
-        }
-        return updated;
+        return u;
       });
     }
     return initialUsers;
@@ -263,13 +302,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<AppUser>(() => {
     const saved = loadStorage<AppUser | null>('user', null);
     if (saved && users.some((u) => u.id === saved.id && u.isActive)) {
-      if (saved.id === 'u-ea' && !saved.departmentId) {
-        return { ...saved, departmentId: 'dept-ge' };
-      }
       const matched = users.find((u) => u.id === saved.id);
       return matched || saved;
     }
-    return users[0] || initialUsers[0];
+    const adminUser = users.find((u) => u.email === 'admin@admin.com');
+    return adminUser || users[0] || initialUsers[0];
+  });
+
+  const [isChangePasswordRequired, setIsChangePasswordRequired] = useState<boolean>(() => {
+    const adminUser = users.find((u) => u.email === 'admin@admin.com');
+    return Boolean(currentUser?.mustChangePassword || adminUser?.mustChangePassword);
   });
 
   // Authentication & Security state
@@ -366,7 +408,167 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewItemOpen, setIsNewItemOpen] = useState(false);
   const [newItemDefaultType, setNewItemDefaultType] = useState<'project' | 'task'>('task');
   const [newItemDefaultParentId, setNewItemDefaultParentId] = useState<string | null>(null);
+  const [newItemMode, setNewItemMode] = useState<
+    'project' | 'sub_project' | 'task' | 'sub_task' | 'generic'
+  >('generic');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  const openCreateModal = (options?: {
+    type?: 'project' | 'task';
+    parentId?: string | null;
+    mode?: 'project' | 'sub_project' | 'task' | 'sub_task' | 'generic';
+  }) => {
+    const type = options?.type || 'task';
+    const parentId = options?.parentId !== undefined ? options.parentId : null;
+    let mode = options?.mode;
+
+    if (!mode) {
+      if (parentId) {
+        const parent = workItems.find((w) => w.id === parentId);
+        if (parent?.itemType === 'task') {
+          mode = 'sub_task';
+        } else if (parent?.itemType === 'project') {
+          mode = type === 'project' ? 'sub_project' : 'task';
+        } else {
+          mode = 'generic';
+        }
+      } else {
+        mode = type === 'project' ? 'project' : 'task';
+      }
+    }
+
+    setNewItemDefaultType(type);
+    setNewItemDefaultParentId(parentId);
+    setNewItemMode(mode || 'generic');
+    setIsNewItemOpen(true);
+  };
+
+  // In-App Updates state
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false);
+
+  const checkUpdates = async (isManual = false): Promise<UpdateInfo> => {
+    setIsCheckingUpdates(true);
+    try {
+      const info = await checkForAppUpdates();
+      setUpdateInfo(info);
+      if (isManual) {
+        setIsUpdateModalOpen(true);
+      }
+      return info;
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
+
+  useEffect(() => {
+    const updateSettings = loadUpdateSettings();
+    if (shouldCheckForUpdate(updateSettings)) {
+      checkForAppUpdates().then((info) => {
+        setUpdateInfo(info);
+        if (info.isAvailable && (!updateSettings.ignoredVersion || updateSettings.ignoredVersion !== info.latestVersion)) {
+          setIsUpdateModalOpen(true);
+        }
+      });
+    }
+  }, []);
+
+  // Database Backup and Restore with zero data loss guarantee
+  const exportDatabaseBackup = () => {
+    const fullSnapshot = {
+      workItems,
+      meetings,
+      followups,
+      users,
+      departments,
+      subDomains,
+      teamMembers,
+      categories,
+      priorities,
+      statuses,
+      ceoAttentionStatuses,
+      itemLinks,
+      activityLogs,
+      settings,
+    };
+    const res = createPreUpdateBackup(fullSnapshot);
+    if (res.success) {
+      addToast({ message: `Encrypted database backup downloaded: ${res.filename}`, type: 'success' });
+    }
+  };
+
+  const restoreDatabaseBackup = (jsonStr: string): { success: boolean; error?: string } => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      const data = parsed.data || parsed;
+      if (!data.workItems || !Array.isArray(data.workItems)) {
+        return { success: false, error: 'Invalid backup format: missing workItems data.' };
+      }
+
+      if (data.users && Array.isArray(data.users)) setUsers(data.users);
+      if (data.workItems && Array.isArray(data.workItems)) setWorkItems(data.workItems);
+      if (data.meetings && Array.isArray(data.meetings)) setMeetings(data.meetings);
+      if (data.followups && Array.isArray(data.followups)) setFollowups(data.followups);
+      if (data.departments && Array.isArray(data.departments)) setDepartments(data.departments);
+      if (data.subDomains && Array.isArray(data.subDomains)) setSubDomains(data.subDomains);
+      if (data.teamMembers && Array.isArray(data.teamMembers)) setTeamMembers(data.teamMembers);
+      if (data.itemLinks && Array.isArray(data.itemLinks)) setItemLinks(data.itemLinks);
+      if (data.settings) setSettings(data.settings);
+
+      addToast({ message: 'Database successfully restored with zero data loss.', type: 'success' });
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Failed to parse backup JSON.' };
+    }
+  };
+
+  // Asynchronous AES-256 Vault persistence
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const snapshot = {
+        version: CURRENT_APP_VERSION,
+        timestamp: new Date().toISOString(),
+        users,
+        departments,
+        subDomains,
+        teamMembers,
+        categories,
+        priorities,
+        statuses,
+        ceoAttentionStatuses,
+        workItems,
+        followups,
+        meetings,
+        itemLinks,
+        activityLogs,
+        settings,
+      };
+      encryptData(snapshot).then((ciphertext) => {
+        try {
+          localStorage.setItem('align_app_vault_aes256', ciphertext);
+        } catch {
+          // ignore
+        }
+      });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [
+    users,
+    departments,
+    subDomains,
+    teamMembers,
+    categories,
+    priorities,
+    statuses,
+    ceoAttentionStatuses,
+    workItems,
+    followups,
+    meetings,
+    itemLinks,
+    activityLogs,
+    settings,
+  ]);
 
   // Sync to localStorage
   useEffect(() => saveStorage('user', currentUser), [currentUser]);
@@ -426,7 +628,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isCeoViewer = currentUser.role === 'ceo_viewer';
   const isViewer = currentUser.role === 'ceo_viewer' || currentUser.role === 'viewer';
 
-  const addUser = (userData: Omit<AppUser, 'id' | 'createdAt'>) => {
+  const addUser = async (userData: Omit<AppUser, 'id' | 'createdAt'>): Promise<{ success: boolean; error?: string }> => {
     if (!userData.name.trim() || !userData.email.trim()) {
       return { success: false, error: 'Name and email are required.' };
     }
@@ -434,6 +636,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (users.some((u) => u.email.toLowerCase() === emailNormalized)) {
       return { success: false, error: 'A user with this email address already exists.' };
     }
+    const rawPass = userData.password?.trim() || 'align2026!';
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(rawPass, salt);
+
     const newUser: AppUser = {
       ...userData,
       id: 'u-' + Math.random().toString(36).substring(2, 9),
@@ -441,8 +647,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: emailNormalized,
       isActive: userData.isActive !== false,
       createdAt: todayStr,
-      password: userData.password?.trim() || 'align@2026',
+      salt,
+      passwordHash,
+      mustChangePassword: true,
     };
+    delete (newUser as any).password;
     setUsers((prev) => [...prev, newUser]);
     logActivity('user', newUser.id, 'create', 'user', null, newUser.name);
     addToast({
@@ -531,7 +740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveStorage('lock_on_tab_blur', b);
   };
 
-  const login = (email: string, pass: string): { success: boolean; error?: string } => {
+  const login = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     const emailNorm = email.trim().toLowerCase();
     const user = users.find((u) => u.email.toLowerCase() === emailNorm);
     if (!user) {
@@ -540,15 +749,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!user.isActive) {
       return { success: false, error: 'This user account is inactive. Please contact an administrator.' };
     }
-    const expectedPass = user.password || 'align@2026';
-    if (pass !== expectedPass) {
-      return { success: false, error: 'Incorrect password. Default password is align@2026' };
+    const isValid = await verifyPassword(pass, user.passwordHash, user.salt, user.password);
+    if (!isValid) {
+      return { success: false, error: 'Incorrect password. Default password is admin' };
     }
 
     setCurrentUser(user);
     saveStorage('user', user);
     setIsAuthenticated(true);
     saveStorage('is_authenticated', true);
+
+    if (user.mustChangePassword) {
+      setIsChangePasswordRequired(true);
+    } else {
+      setIsChangePasswordRequired(false);
+    }
+
     addToast({ message: `Signed in as ${user.name}`, type: 'success' });
     return { success: true };
   };
@@ -615,22 +831,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({ message: 'PIN reset. You will be prompted on next lock.', type: 'info' });
   };
 
-  const changeUserPassword = (
+  const changeUserPassword = async (
     userId: string,
     oldPass: string,
     newPass: string
-  ): { success: boolean; error?: string } => {
+  ): Promise<{ success: boolean; error?: string }> => {
     const targetUser = users.find((u) => u.id === userId);
     if (!targetUser) return { success: false, error: 'User not found.' };
-    const currentPass = targetUser.password || 'align@2026';
-    if (oldPass !== currentPass) {
+
+    const isValid = await verifyPassword(oldPass, targetUser.passwordHash, targetUser.salt, targetUser.password);
+    if (!isValid) {
       return { success: false, error: 'Current password is incorrect.' };
     }
     if (newPass.length < 6) {
       return { success: false, error: 'New password must be at least 6 characters.' };
     }
-    updateUser(userId, { password: newPass });
-    addToast({ message: 'Password updated successfully.', type: 'success' });
+    if (newPass.toLowerCase() === 'admin') {
+      return { success: false, error: 'New password cannot be "admin". Please choose a secure password.' };
+    }
+
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(newPass, salt);
+
+    const updatedUser: AppUser = {
+      ...targetUser,
+      passwordHash,
+      salt,
+      password: undefined,
+      mustChangePassword: false,
+    };
+
+    updateUser(userId, updatedUser);
+    if (currentUser.id === userId) {
+      setCurrentUser(updatedUser);
+      setIsChangePasswordRequired(false);
+    }
+
+    addToast({ message: 'Password updated successfully. Account secured.', type: 'success' });
     return { success: true };
   };
 
@@ -865,6 +1102,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({ message: 'Item restored.', type: 'success' });
   };
 
+  const deleteWorkItem = (id: string) => {
+    const item = existingItem(id);
+    if (!item) return;
+
+    // Collect all recursive descendants
+    const idsToDelete = new Set<string>([id]);
+    const collectDescendants = (parentId: string) => {
+      workItems
+        .filter((w) => w.parentId === parentId)
+        .forEach((child) => {
+          idsToDelete.add(child.id);
+          collectDescendants(child.id);
+        });
+    };
+    collectDescendants(id);
+
+    setWorkItems((prev) => prev.filter((w) => !idsToDelete.has(w.id)));
+    setItemLinks((prev) =>
+      prev.filter((l) => !idsToDelete.has(l.sourceId) && !idsToDelete.has(l.targetId))
+    );
+    setFollowups((prev) => prev.filter((fu) => !idsToDelete.has(fu.workItemId)));
+
+    if (selectedItemId && idsToDelete.has(selectedItemId)) {
+      setSelectedItemId(null);
+    }
+
+    logActivity('work_item', id, 'deleted', item.itemType, item.name, null);
+    addToast({
+      message: `${item.itemType === 'project' ? 'Project' : 'Task'} "${item.name}" deleted.`,
+      type: 'info',
+    });
+  };
+
   const toggleCeoAttention = (id: string, note?: string) => {
     if (!canEdit) {
       addToast({ message: 'Only EA and Admin roles can flag items for CEO Attention.', type: 'warning' });
@@ -994,6 +1264,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast({ message: 'Follow-up cancelled.', type: 'info' });
   };
 
+  const deleteFollowup = (id: string) => {
+    const fu = followups.find((f) => f.id === id);
+    setFollowups((prev) => prev.filter((f) => f.id !== id));
+    logActivity('followup', id, 'deleted', undefined, fu?.remarks, null);
+    addToast({ message: 'Follow-up deleted.', type: 'info' });
+  };
+
   // Meetings
   const createMeeting = (
     meetingData: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'isArchived'>,
@@ -1040,6 +1317,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((m) => (m.id === id ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m))
     );
     addToast({ message: 'Meeting updated.', type: 'success' });
+  };
+
+  const deleteMeeting = (id: string) => {
+    const meeting = meetings.find((m) => m.id === id);
+    setMeetings((prev) => prev.filter((m) => m.id !== id));
+    setItemLinks((prev) =>
+      prev.filter((l) => !(l.sourceId === id || l.targetId === id))
+    );
+    if (selectedMeetingId === id) setSelectedMeetingId(null);
+    logActivity('meeting', id, 'deleted', undefined, meeting?.title, null);
+    addToast({ message: `Meeting "${meeting?.title || ''}" deleted.`, type: 'info' });
+  };
+
+  const createMeetingDeliverable = (meetingId: string, title: string, dueDate?: string): WorkItem => {
+    const meeting = meetings.find((m) => m.id === meetingId);
+    const task = createWorkItem({
+      itemType: 'task',
+      parentId: null,
+      name: title.trim(),
+      description: `Action item generated from meeting: ${meeting ? meeting.title : 'Executive Sync'}`,
+      statusId: 'stat-not-started',
+      priorityId: 'prio-med',
+      categoryId: 'cat-plan',
+      departmentIds: ['dept-ge'],
+      subDomainIds: [],
+      teamMemberIds: [],
+      dueDate: dueDate || undefined,
+      weightMode: 'auto',
+      needsCeoAttention: false,
+      taskKind: 'one_time',
+    });
+    addLink('meeting', meetingId, 'work_item', task.id);
+    addToast({ message: `Deliverable "${title.trim()}" added to meeting.`, type: 'success' });
+    return task;
   };
 
   // Links
@@ -1433,6 +1744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ceoStatusMap,
         createWorkItem,
         updateWorkItem,
+        deleteWorkItem,
         inlineUpdateWorkItem,
         archiveWorkItem,
         restoreWorkItem,
@@ -1441,11 +1753,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetWeightToAuto,
         createFollowup,
         updateFollowup,
+        deleteFollowup,
         logFollowupOutcome,
         postponeFollowup,
         cancelFollowup,
         createMeeting,
         updateMeeting,
+        deleteMeeting,
+        createMeetingDeliverable,
         addLink,
         removeLink,
         addListOption,
@@ -1469,8 +1784,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setNewItemDefaultType,
         newItemDefaultParentId,
         setNewItemDefaultParentId,
+        newItemMode,
+        setNewItemMode,
+        openCreateModal,
         isCommandPaletteOpen,
         setIsCommandPaletteOpen,
+        isChangePasswordRequired,
+        setIsChangePasswordRequired,
+        isUpdateModalOpen,
+        setIsUpdateModalOpen,
+        updateInfo,
+        isCheckingUpdates,
+        checkUpdates,
+        exportDatabaseBackup,
+        restoreDatabaseBackup,
         summaryCounts,
         resetAllData,
       }}
