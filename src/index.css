@@ -160,6 +160,21 @@ body {
   outline-offset: 2px;
 }
 
+/* ---------- Display Density System ---------- */
+:root[data-density="compact"] {
+  font-size: 13px;
+}
+
+:root[data-density="compact"] table th,
+:root[data-density="compact"] table td {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+:root[data-density="compact"] tr {
+  height: 2.25rem !important;
+}
+
 /* Diagonal hatch pattern for Blocked badges */
 .hatch-blocked {
   background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(180, 35, 24, 0.12) 4px 6px);

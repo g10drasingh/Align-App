@@ -54,6 +54,7 @@ export const TopBar: React.FC = () => {
     updateInfo,
     checkUpdates,
     setIsChangePasswordRequired,
+    addToast,
   } = useApp();
 
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
@@ -213,11 +214,33 @@ export const TopBar: React.FC = () => {
 
         {/* Density toggle */}
         <button
-          onClick={() => setDensity(density === 'comfortable' ? 'compact' : 'comfortable')}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] cursor-pointer transition-colors"
-          title={`Switch to ${density === 'comfortable' ? 'Compact' : 'Comfortable'} density`}
+          onClick={() => {
+            const next = density === 'comfortable' ? 'compact' : 'comfortable';
+            setDensity(next);
+            addToast({
+              message: `Display density: ${
+                next === 'compact'
+                  ? 'Compact mode (condensed tables and rows)'
+                  : 'Comfortable mode (standard executive spacing)'
+              }`,
+              type: 'info',
+            });
+          }}
+          className={`relative flex h-8 w-8 items-center justify-center rounded-md border transition-all cursor-pointer ${
+            density === 'compact'
+              ? 'border-[var(--brand-border)] bg-[var(--brand-subtle)] text-[var(--brand-600)] font-semibold shadow-2xs'
+              : 'border-[var(--border)] text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+          }`}
+          title={`Display Density: ${
+            density === 'comfortable'
+              ? 'Comfortable (Click to switch to Compact)'
+              : 'Compact (Click to switch to Comfortable)'
+          }`}
         >
           <Sliders className="h-3.5 w-3.5" />
+          {density === 'compact' && (
+            <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[var(--brand-600)]" />
+          )}
         </button>
 
         {/* Theme Menu */}

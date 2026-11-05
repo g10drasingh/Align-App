@@ -611,6 +611,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [theme]);
 
+  // Handle display density application on html root
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-density', density);
+  }, [density]);
+
   // Maps for fast lookup
   const departmentMap = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
   const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
