@@ -9,7 +9,7 @@
  * matches platform-specific installers, and ensures complete data safety via pre-update backups.
  */
 
-export const CURRENT_APP_VERSION = '0.1.0';
+export const CURRENT_APP_VERSION = '0.0.3';
 export const GITHUB_REPO = 'g10drasingh/Align-App';
 
 export type PlatformType = 'windows' | 'macos' | 'linux' | 'web';
